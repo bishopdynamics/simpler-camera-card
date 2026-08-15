@@ -23,6 +23,11 @@ dist/
 # --- Node ---
 node_modules/
 
+# --- TypeScript / bundlers ---
+*.tsbuildinfo
+.vite/
+coverage/
+
 # --- Editors ---
 .idea/
 *.swp

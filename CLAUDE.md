@@ -1,6 +1,6 @@
-# Project: (name not set — see First Run)
+# Project: Simpler Camera Card
 
-(one-line project description — set during first run)
+A simpler, more robust Home Assistant camera card for Frigate — single-camera live view via go2rtc that survives network blips on long-running dashboards.
 
 > **First run:** if `docs/FIRST_RUN.md` exists, this project has not been initialized yet.
 > Complete that process before doing anything else.
