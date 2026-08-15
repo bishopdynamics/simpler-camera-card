@@ -10,18 +10,21 @@
     "test": "vitest run",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
     "lit": "3.3.3"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
+    "@types/node": "26.2.0",
     "@vitest/coverage-v8": "4.1.10",
     "eslint": "10.8.1",
     "globals": "17.11.0",
     "happy-dom": "20.11.2",
     "home-assistant-js-websocket": "9.6.0",
+    "playwright-core": "1.62.1",
     "prettier": "3.9.6",
     "typescript": "6.0.3",
     "typescript-eslint": "8.67.0",

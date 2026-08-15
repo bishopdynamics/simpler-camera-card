@@ -1,6 +1,17 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { SimplerCameraCard, normalizeConfig } from '../src/card';
-import { CARD_TAG, CARD_TYPE, type CameraEntity, type HomeAssistant } from '../src/types';
+import type { StreamSupervisorDeps } from '../src/reliability/supervisor';
+import {
+  CARD_TAG,
+  CARD_TYPE,
+  HIDDEN_TEARDOWN_GRACE_MS,
+  POSTER_REFRESH_INTERVAL_MS,
+  TIER1_RETRY_DELAY_MS,
+  type CameraEntity,
+  type EndpointResolver,
+  type HomeAssistant,
+  type LivePlayer,
+} from '../src/types';
 
 const base = { type: CARD_TYPE, camera: 'camera.front_yard' };
 
@@ -22,6 +33,84 @@ function fakeHass(...entities: CameraEntity[]): HomeAssistant {
     callWS: async () => ({}) as never,
   };
 }
+
+/** The camera the wiring tests use: Frigate attributes plus a snapshot URL. */
+const posterEntity = cameraEntity('camera.front_yard', {
+  camera_name: 'front_yard',
+  friendly_name: 'Front Yard',
+  entity_picture: '/api/camera_proxy/camera.front_yard?token=abc',
+});
+
+const WS_URL = 'wss://ha.local/api/frigate/abc/go2rtc/ws/api/ws?src=front_yard';
+
+/** An {@link EndpointResolver} that resolves instantly, with no Home Assistant. */
+function stubEndpoint(overrides: Partial<EndpointResolver> = {}): EndpointResolver {
+  return {
+    resolveSignedWsUrl: async () => WS_URL,
+    resolvePosterUrl: async () => null,
+    ...overrides,
+  };
+}
+
+/** A resolver that never settles, parking the supervisor in `connecting`. */
+function neverResolves(): EndpointResolver {
+  return stubEndpoint({ resolveSignedWsUrl: () => new Promise<string>(() => {}) });
+}
+
+interface FakePlayer extends LivePlayer {
+  video?: HTMLVideoElement;
+  url?: string;
+  destroyed: boolean;
+}
+
+/** Records every player the card's factory is asked to build. */
+function playerFactory(): { players: FakePlayer[]; create: () => FakePlayer } {
+  const players: FakePlayer[] = [];
+  const create = (): FakePlayer => {
+    const player: FakePlayer = {
+      destroyed: false,
+      onPlaying: () => {},
+      onDead: () => {},
+      mount(video, url) {
+        player.video = video;
+        player.url = url;
+      },
+      destroy() {
+        player.destroyed = true;
+      },
+    };
+    players.push(player);
+    return player;
+  };
+  return { players, create };
+}
+
+function mountCard(
+  config: Record<string, unknown> = base,
+  overrides: Partial<StreamSupervisorDeps> = {},
+  hass: HomeAssistant = fakeHass(posterEntity),
+): SimplerCameraCard {
+  const card = document.createElement(CARD_TAG);
+  card.supervisorOverrides = overrides;
+  card.setConfig(config);
+  card.hass = hass;
+  document.body.appendChild(card);
+  return card;
+}
+
+/** Flush Lit's update queue and the endpoint promise chain. */
+async function settle(card: SimplerCameraCard): Promise<void> {
+  for (let i = 0; i < 6; i += 1) await card.updateComplete;
+}
+
+function statusText(card: SimplerCameraCard): string | undefined {
+  return card.shadowRoot?.querySelector('.status')?.textContent?.trim();
+}
+
+afterEach(() => {
+  vi.useRealTimers();
+  document.querySelectorAll(CARD_TAG).forEach((card) => card.remove());
+});
 
 describe('normalizeConfig — required fields', () => {
   it('accepts a minimal config', () => {
@@ -194,26 +283,26 @@ describe('SimplerCameraCard element', () => {
     expect(SimplerCameraCard.getStubConfig(fakeHass()).camera).toMatch(/^camera\./);
   });
 
+  it('rejects transport: webrtc with a "coming soon" message', () => {
+    const card = new SimplerCameraCard();
+    // The schema accepts it (frozen contract); the card does not, yet.
+    expect(normalizeConfig({ ...base, transport: 'webrtc' }).transport).toBe('webrtc');
+    expect(() => card.setConfig({ ...base, transport: 'webrtc' })).toThrow(/coming soon/);
+  });
+
   it('renders the shell: poster, video, overlay and status layers', async () => {
-    const card = document.createElement(CARD_TAG);
-    card.setConfig({ ...base, overlay: 'name' });
-    card.hass = fakeHass(
-      cameraEntity('camera.front_yard', {
-        camera_name: 'front_yard',
-        friendly_name: 'Front Yard',
-        entity_picture: '/api/camera_proxy/camera.front_yard?token=abc',
-      }),
-    );
-    document.body.appendChild(card);
+    const card = mountCard({ ...base, overlay: 'name' }, { endpoint: neverResolves() });
     await card.updateComplete;
 
     const root = card.shadowRoot!;
     expect(root.querySelector('video')).not.toBeNull();
     expect(root.querySelector('img.poster')?.getAttribute('src')).toContain('/api/camera_proxy/');
     expect(root.querySelector('.overlay')?.textContent?.trim()).toBe('Front Yard');
-    // Nothing drives the stream yet, so the placeholder state is shown.
-    expect(root.querySelector('.status')?.textContent?.trim()).toBe('Not connected');
     expect(root.querySelector('.container')?.getAttribute('style')).toContain('16 / 9');
+
+    // The supervisor starts as soon as config + hass + connection are present.
+    await card.updateComplete;
+    expect(root.querySelector('.status')?.textContent?.trim()).toBe('Connecting…');
 
     card.remove();
   });
@@ -224,5 +313,228 @@ describe('SimplerCameraCard element', () => {
     await card.updateComplete;
     expect(card.shadowRoot!.querySelector('ha-card')).toBeNull();
     card.remove();
+  });
+});
+
+describe('SimplerCameraCard — supervisor wiring', () => {
+  it('mounts a player on the card’s own video element once everything is present', async () => {
+    const { players, create } = playerFactory();
+    const card = mountCard(base, { createPlayer: create, endpoint: stubEndpoint() });
+    await settle(card);
+
+    expect(players).toHaveLength(1);
+    expect(players[0].url).toBe(WS_URL);
+    expect(players[0].video).toBe(card.shadowRoot!.querySelector('video'));
+  });
+
+  it('waits for hass before starting, whatever order things arrive in', async () => {
+    const { players, create } = playerFactory();
+    const card = document.createElement(CARD_TAG);
+    card.supervisorOverrides = { createPlayer: create, endpoint: stubEndpoint() };
+    card.setConfig(base);
+    document.body.appendChild(card);
+    await settle(card);
+    expect(players).toHaveLength(0);
+
+    card.hass = fakeHass(posterEntity);
+    await settle(card);
+    expect(players).toHaveLength(1);
+  });
+
+  it('stops the supervisor when the card leaves the DOM', async () => {
+    const { players, create } = playerFactory();
+    const card = mountCard(base, { createPlayer: create, endpoint: stubEndpoint() });
+    await settle(card);
+
+    card.remove();
+    expect(players[0].destroyed).toBe(true);
+  });
+
+  it('rebuilds the supervisor when setConfig changes the stream', async () => {
+    const { players, create } = playerFactory();
+    const card = mountCard(base, { createPlayer: create, endpoint: stubEndpoint() });
+    await settle(card);
+
+    card.setConfig({ ...base, stream: 'front_yard_sub' });
+    await settle(card);
+
+    expect(players).toHaveLength(2);
+    expect(players[0].destroyed).toBe(true);
+    expect(players[1].destroyed).toBe(false);
+  });
+
+  it('keeps the same <video> element across re-renders', async () => {
+    const card = mountCard({ ...base, overlay: 'name' }, { endpoint: neverResolves() });
+    await settle(card);
+    const video = card.shadowRoot!.querySelector('video');
+
+    card.hass = fakeHass(cameraEntity('camera.front_yard', { camera_name: 'front_yard' }));
+    await settle(card);
+
+    expect(card.shadowRoot!.querySelector('video')).toBe(video);
+  });
+
+  it('hides the poster and the status pill while playing', async () => {
+    const { players, create } = playerFactory();
+    const card = mountCard(base, { createPlayer: create, endpoint: stubEndpoint() });
+    await settle(card);
+    expect(card.shadowRoot!.querySelector('img.poster')).not.toBeNull();
+
+    players[0].onPlaying();
+    await settle(card);
+
+    expect(card.shadowRoot!.querySelector('img.poster')).toBeNull();
+    expect(statusText(card)).toBeUndefined();
+  });
+
+  it('surfaces an endpoint failure through the status indicator', async () => {
+    const card = mountCard(base, {
+      endpoint: stubEndpoint({
+        resolveSignedWsUrl: async () => {
+          throw new Error('Home Assistant refused to sign the path');
+        },
+      }),
+    });
+    await settle(card);
+    expect(statusText(card)).toBe('Reconnecting in 2 s… — Home Assistant refused to sign the path');
+  });
+});
+
+describe('SimplerCameraCard — lifecycle plumbing', () => {
+  it('retries a dead stream on the tier-1 delay, showing the countdown', async () => {
+    vi.useFakeTimers();
+    const { players, create } = playerFactory();
+    const card = mountCard(base, { createPlayer: create, endpoint: stubEndpoint() });
+    await settle(card);
+
+    players[0].onDead('ws-close');
+    await settle(card);
+    expect(statusText(card)).toBe('Reconnecting in 2 s…');
+
+    await vi.advanceTimersByTimeAsync(TIER1_RETRY_DELAY_MS);
+    await settle(card);
+    expect(players).toHaveLength(2);
+  });
+
+  it('reconnects immediately on the hass.connected false→true edge', async () => {
+    vi.useFakeTimers();
+    const { players, create } = playerFactory();
+    const card = mountCard(base, { createPlayer: create, endpoint: stubEndpoint() });
+    await settle(card);
+
+    players[0].onDead('ws-close');
+    await settle(card);
+    expect(players).toHaveLength(1);
+
+    card.hass = { ...fakeHass(posterEntity), connected: false };
+    card.hass = fakeHass(posterEntity);
+    await settle(card);
+
+    // No timer was advanced: the edge cut the pending backoff short.
+    expect(players).toHaveLength(2);
+  });
+
+  it('tears the stream down after the hidden grace period and back up on visible', async () => {
+    vi.useFakeTimers();
+    const visibility = { value: 'visible' };
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => visibility.value,
+    });
+    try {
+      const { players, create } = playerFactory();
+      const card = mountCard(base, { createPlayer: create, endpoint: stubEndpoint() });
+      await settle(card);
+
+      visibility.value = 'hidden';
+      document.dispatchEvent(new Event('visibilitychange'));
+      await vi.advanceTimersByTimeAsync(HIDDEN_TEARDOWN_GRACE_MS);
+      await settle(card);
+
+      expect(players[0].destroyed).toBe(true);
+      expect(statusText(card)).toBe('Paused while the dashboard is hidden.');
+
+      visibility.value = 'visible';
+      document.dispatchEvent(new Event('visibilitychange'));
+      await settle(card);
+      expect(players).toHaveLength(2);
+    } finally {
+      delete (document as unknown as Record<string, unknown>).visibilityState;
+    }
+  });
+
+  it('treats pageshow/online/resume as page-resumed', async () => {
+    vi.useFakeTimers();
+    const { players, create } = playerFactory();
+    const card = mountCard(base, { createPlayer: create, endpoint: stubEndpoint() });
+    await settle(card);
+
+    players[0].onDead('ws-close');
+    await settle(card);
+    expect(players).toHaveLength(1);
+
+    window.dispatchEvent(new Event('online'));
+    await settle(card);
+    expect(players).toHaveLength(2);
+  });
+
+  it('drops its listeners when disconnected', async () => {
+    vi.useFakeTimers();
+    const { players, create } = playerFactory();
+    const card = mountCard(base, { createPlayer: create, endpoint: stubEndpoint() });
+    await settle(card);
+    card.remove();
+
+    window.dispatchEvent(new Event('online'));
+    window.dispatchEvent(new Event('pageshow'));
+    document.dispatchEvent(new Event('visibilitychange'));
+    await vi.advanceTimersByTimeAsync(HIDDEN_TEARDOWN_GRACE_MS + TIER1_RETRY_DELAY_MS);
+
+    expect(players).toHaveLength(1);
+  });
+});
+
+describe('SimplerCameraCard — poster', () => {
+  it('refreshes the signed snapshot while down, and stops once playing', async () => {
+    vi.useFakeTimers();
+    let issued = 0;
+    const { players, create } = playerFactory();
+    const card = mountCard(base, {
+      createPlayer: create,
+      endpoint: stubEndpoint({
+        resolvePosterUrl: async () => `/api/camera_proxy/camera.front_yard?sig=${issued++}`,
+      }),
+    });
+    await settle(card);
+
+    expect(card.shadowRoot!.querySelector('img.poster')?.getAttribute('src')).toContain('sig=0');
+
+    await vi.advanceTimersByTimeAsync(POSTER_REFRESH_INTERVAL_MS);
+    await settle(card);
+    expect(card.shadowRoot!.querySelector('img.poster')?.getAttribute('src')).toContain('sig=1');
+
+    players[0].onPlaying();
+    await settle(card);
+    await vi.advanceTimersByTimeAsync(POSTER_REFRESH_INTERVAL_MS * 3);
+    expect(issued).toBe(2);
+  });
+
+  it('never lets a poster failure take the card down', async () => {
+    const { players, create } = playerFactory();
+    const card = mountCard(base, {
+      createPlayer: create,
+      endpoint: stubEndpoint({
+        resolvePosterUrl: async () => {
+          throw new Error('sign-failed');
+        },
+      }),
+    });
+    await settle(card);
+
+    // The stream is unaffected, and the unsigned entity_picture still shows.
+    expect(players).toHaveLength(1);
+    expect(card.shadowRoot!.querySelector('img.poster')?.getAttribute('src')).toContain(
+      'token=abc',
+    );
   });
 });

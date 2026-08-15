@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitest/config';
+import { configDefaults, defineConfig } from 'vitest/config';
 
 // Library-mode build producing a single, unhashed ES module bundle at
 // dist/simpler-camera-card.js. `lit` is bundled in (no externals) so the
@@ -26,5 +26,9 @@ export default defineConfig({
   test: {
     environment: 'happy-dom',
     include: ['tests/**/*.test.ts'],
+    // The go2rtc integration suite needs real processes and a real browser; it
+    // has its own runner (`vitest.integration.config.ts`, `make
+    // test-integration`) and must never be part of `make check`.
+    exclude: [...configDefaults.exclude, 'tests/integration/**'],
   },
 });

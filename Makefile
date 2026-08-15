@@ -1,4 +1,4 @@
-.PHONY: setup build test lint format typecheck check
+.PHONY: setup build test test-integration lint format typecheck check
 
 setup:
 	npm install
@@ -8,6 +8,12 @@ build:
 
 test:
 	npm run test
+
+# Real go2rtc + ffmpeg + headless Chromium. Not part of `check`: it needs local
+# media tooling (see scripts/fetch-go2rtc.sh) and takes about a minute. Skips
+# cleanly when that tooling is absent.
+test-integration:
+	npm run test:integration
 
 lint:
 	npm run lint

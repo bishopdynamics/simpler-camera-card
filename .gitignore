@@ -28,6 +28,9 @@ node_modules/
 .vite/
 coverage/
 
+# --- Integration-test tooling (scripts/fetch-go2rtc.sh) ---
+tools/
+
 # --- Editors ---
 .idea/
 *.swp
