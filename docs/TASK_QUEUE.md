@@ -21,4 +21,4 @@ How to process/manage the Task Queue:
 
 1. ROOT_SPEC.md [in-progress]
    1. Implement the initial specification.
-   2. Status: slice 1 (Scaffolding) done — commit fe1812d, `make check` green. Next: slice 2 (Contracts + card skeleton).
+   2. Status: slices 1–2 done (fe1812d, 3e4ec0b), `make check` green (46 tests). Contract frozen in src/types.ts. Next: parallel-1 pair — slice 3 (go2rtc client + MSE player) ∥ slice 4 (reliability layer).
