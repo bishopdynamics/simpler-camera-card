@@ -19,7 +19,7 @@ How to process/manage the Task Queue:
 
 ## Queue
 
-1. Initial Planning
+1. Initial Planning [in-progress]
    1. Read `docs/idea/initial-idea.md`.
    2. Discuss, help the user flesh out the idea, research, discuss again, then write `docs/spec/ROOT_SPEC.md` (start from `docs/spec/SPEC_TEMPLATE.md`).
 2. ROOT_SPEC.md

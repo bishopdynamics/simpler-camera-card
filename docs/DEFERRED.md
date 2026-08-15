@@ -10,4 +10,10 @@ and the agent then removes it from this list.
 
 One line per item: `- <what> — from docs/spec/<file>.md (YYYY-MM-DD)`
 
--
+- Audio playback support (v1 is muted-only) — from docs/spec/ROOT_SPEC.md (2026-08-15)
+- Visual config editor (`getConfigElement`) — from docs/spec/ROOT_SPEC.md (2026-08-15)
+- HACS default-store submission — from docs/spec/ROOT_SPEC.md (2026-08-15)
+- Snapshot-refresh transport (ultra-low-power camera_proxy cycling) — from docs/spec/ROOT_SPEC.md (2026-08-15)
+- Direct-to-Frigate endpoint override for setups without frigate-hass-integration — from docs/spec/ROOT_SPEC.md (2026-08-15)
+- HA-native WebRTC signalling path (`camera/webrtc/offer`) as :8555 fallback — from docs/spec/ROOT_SPEC.md (2026-08-15)
+- Safari/iOS polish (ManagedMediaSource, jump-to-live quirks) — from docs/spec/ROOT_SPEC.md (2026-08-15)
