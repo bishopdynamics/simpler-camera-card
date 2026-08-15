@@ -1,0 +1,35 @@
+# --- OS junk: macOS ---
+.DS_Store
+.AppleDouble
+._*
+
+# --- OS junk: Linux ---
+*~
+.directory
+.Trash-*
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/
+dist/
+
+# --- Node ---
+node_modules/
+
+# --- Editors ---
+.idea/
+*.swp
+*.swo
+
+# --- Claude Code: personal overrides stay local ---
+.claude/settings.local.json
+
+# --- Elefant offline-memory cache is transient and personal ---
+Elefant-Offline.md

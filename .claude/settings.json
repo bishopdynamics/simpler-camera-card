@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(*)",
+      "Read(./**)",
+      "Read(//tmp/**)",
+      "WebSearch",
+      "WebFetch(*)",
+      "Skill(deep-research)",
+      "mcp__elefant",
+      "mcp__dev-tools",
+      "mcp__browser"
+    ],
+    "deny": [
+      "Bash(sudo*)",
+      "Bash(rm -rf*)",
+      "Bash(rm -f*)"
+    ],
+    "additionalDirectories": [
+      "/tmp"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/rm-guard.py"
+          }
+        ]
+      }
+    ]
+  }
+}
