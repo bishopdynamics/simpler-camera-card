@@ -21,4 +21,4 @@ How to process/manage the Task Queue:
 
 1. ROOT_SPEC.md [in-progress]
    1. Implement the initial specification.
-   2. Status: slices 1–4 done (parallel pair merged: 903177b, 6ab0d26), `make check` green (170 tests). Next: slice 5 (integration — wire supervisor+player+endpoint+poster into card.ts, local go2rtc integration test).
+   2. Status: slices 1–5 done (slice 5: 9625579), `make check` green (185 tests) + integration suite green (3 tests vs real go2rtc). Next: slice 6 (features — actions via hass-action, getStubConfig polish, reload escape hatch config already wired).
