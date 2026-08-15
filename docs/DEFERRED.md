@@ -17,3 +17,4 @@ One line per item: `- <what> — from docs/spec/<file>.md (YYYY-MM-DD)`
 - Direct-to-Frigate endpoint override for setups without frigate-hass-integration — from docs/spec/ROOT_SPEC.md (2026-08-15)
 - HA-native WebRTC signalling path (`camera/webrtc/offer`) as :8555 fallback — from docs/spec/ROOT_SPEC.md (2026-08-15)
 - Safari/iOS polish (ManagedMediaSource, jump-to-live quirks) — from docs/spec/ROOT_SPEC.md (2026-08-15)
+- Release artifact publishing (committed dist/ or GitLab release asset; today the bundle must be built locally, which also gates any HACS custom-repo install) — from docs/spec/ROOT_SPEC.md slice 8 (2026-08-15)

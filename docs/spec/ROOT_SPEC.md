@@ -66,7 +66,7 @@ overlay_text: "Front Yard"       # used when overlay: custom
 tap_action: { action: more-info }        # HA-standard action objects
 hold_action: { action: none }
 double_tap_action: { action: none }
-aspect_ratio: "16:9"             # optional; default: size to the video
+aspect_ratio: "16:9"             # optional; default 16:9 (fixed ratio avoids reflow before first frame)
 reload_after_minutes_down: 0     # 0 (default) = never page-reload
 ```
 
@@ -126,3 +126,4 @@ States: `idle → connecting → playing → retrying(tier1) → remounting(tier
 
 - 2026-08-15 — created from research (`docs/idea/research-notes.md`) and first-run decisions.
 - 2026-08-15 — approved by James; status draft → approved.
+- 2026-08-15 — aspect_ratio YAML comment corrected to match the implemented default (16:9, decided in slice 2).
