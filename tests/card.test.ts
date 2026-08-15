@@ -3,6 +3,12 @@ import { DOUBLE_TAP_MS, HOLD_MS, type HassActionDetail } from '../src/actions';
 import { SimplerCameraCard, normalizeConfig } from '../src/card';
 import type { StreamSupervisorDeps } from '../src/reliability/supervisor';
 import {
+  FakeMediaSource,
+  FakePeerConnection,
+  FakeWebSocket,
+  installObjectUrlStubs,
+} from './player/stubs';
+import {
   CARD_TAG,
   CARD_TYPE,
   HIDDEN_TEARDOWN_GRACE_MS,
@@ -323,11 +329,44 @@ describe('SimplerCameraCard element', () => {
     expect(SimplerCameraCard.getStubConfig(fakeHass()).camera).toMatch(/^camera\./);
   });
 
-  it('rejects transport: webrtc with a "coming soon" message', () => {
+  it('accepts transport: webrtc', () => {
     const card = new SimplerCameraCard();
-    // The schema accepts it (frozen contract); the card does not, yet.
     expect(normalizeConfig({ ...base, transport: 'webrtc' }).transport).toBe('webrtc');
-    expect(() => card.setConfig({ ...base, transport: 'webrtc' })).toThrow(/coming soon/);
+    expect(() => card.setConfig({ ...base, transport: 'webrtc' })).not.toThrow();
+  });
+
+  it('builds a WebRTC player for transport: webrtc, and an MSE one otherwise', async () => {
+    // The factory is internal, so it is observed through what each player
+    // actually opens: the WebRTC one creates an RTCPeerConnection, the MSE one
+    // a MediaSource. Both are read off the globals, which is what makes this a
+    // test of the real wiring rather than of an injected double.
+    vi.stubGlobal('WebSocket', FakeWebSocket);
+    vi.stubGlobal('RTCPeerConnection', FakePeerConnection);
+    vi.stubGlobal('MediaSource', FakeMediaSource);
+    const restoreObjectUrl = installObjectUrlStubs();
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+    FakeWebSocket.reset();
+    FakePeerConnection.reset();
+    FakeMediaSource.reset();
+
+    try {
+      const webrtcCard = mountCard({ ...base, transport: 'webrtc' }, { endpoint: stubEndpoint() });
+      await settle(webrtcCard);
+      expect(FakePeerConnection.instances).toHaveLength(1);
+      expect(FakeMediaSource.instances).toHaveLength(0);
+      expect(FakeWebSocket.last().url).toBe(WS_URL);
+      webrtcCard.remove();
+
+      const mseCard = mountCard({ ...base, transport: 'mse' }, { endpoint: stubEndpoint() });
+      await settle(mseCard);
+      expect(FakePeerConnection.instances).toHaveLength(1);
+      expect(FakeMediaSource.instances).toHaveLength(1);
+      mseCard.remove();
+    } finally {
+      info.mockRestore();
+      restoreObjectUrl();
+      vi.unstubAllGlobals();
+    }
   });
 
   it('renders the shell: poster, video, overlay and status layers', async () => {

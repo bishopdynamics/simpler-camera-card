@@ -28,6 +28,7 @@ import { state } from 'lit/decorators.js';
 import { ActionController, isInteractive } from './actions';
 import { endpointResolver } from './endpoint';
 import { MsePlayer } from './player/mse-player';
+import { WebRtcPlayer } from './player/webrtc-player';
 import { StreamSupervisorImpl, type StreamSupervisorDeps } from './reliability/supervisor';
 import {
   ACTION_NAMES,
@@ -325,17 +326,6 @@ export class SimplerCameraCard extends LitElement {
   /** Called by Lovelace on every config edit; must throw on invalid input. */
   setConfig(config: unknown): void {
     const next = normalizeConfig(config);
-
-    // TODO(slice 7): delete this once `player/webrtc-player.ts` exists. The
-    // schema accepts `webrtc` (it is part of the frozen config contract), but
-    // accepting it here would leave the user staring at a card that retries
-    // forever with no explanation.
-    if (next.transport === 'webrtc') {
-      throw new ConfigError(
-        '"transport: webrtc" is coming soon — this version only supports "transport: mse".',
-      );
-    }
-
     const previous = this._config;
     this._config = next;
 
@@ -432,14 +422,8 @@ export class SimplerCameraCard extends LitElement {
 
   private _startSupervisor(config: NormalizedCardConfig): void {
     const supervisor = new StreamSupervisorImpl({
-      createPlayer: (transport): LivePlayer => {
-        if (transport === 'webrtc') {
-          // Unreachable through `setConfig` today; slice 7 replaces this arm
-          // with `new WebRtcPlayer()`.
-          throw new Error('transport "webrtc" is not implemented yet');
-        }
-        return new MsePlayer();
-      },
+      createPlayer: (transport): LivePlayer =>
+        transport === 'webrtc' ? new WebRtcPlayer() : new MsePlayer(),
       endpoint: endpointResolver,
       getHass: () => this._hass,
       getVideo: () => this._video,
