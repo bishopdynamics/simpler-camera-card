@@ -1,0 +1,10 @@
+# Prose and process docs are managed by hand (and by agents) — Prettier's
+# markdown reflow churns them without improving anything.
+*.md
+docs/
+
+# Tooling/harness state and generated output.
+.claude/
+.bishop/
+dist/
+package-lock.json
