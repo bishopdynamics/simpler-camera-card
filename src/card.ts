@@ -14,13 +14,18 @@
  *    re-signed and refreshed every {@link POSTER_REFRESH_INTERVAL_MS} while the
  *    stream is down.
  *
+ * Tap / hold / double-tap live in `actions.ts`; the card only attaches the
+ * {@link ActionController} to its container and renders the matching
+ * accessibility affordances.
+ *
  * The card never talks to a player or a socket directly: it reports facts and
  * renders state. Everything about *when to reconnect* lives in
  * `reliability/supervisor.ts`.
  */
 
-import { LitElement, css, html, nothing, type TemplateResult } from 'lit';
+import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from 'lit';
 import { state } from 'lit/decorators.js';
+import { ActionController, isInteractive } from './actions';
 import { endpointResolver } from './endpoint';
 import { MsePlayer } from './player/mse-player';
 import { StreamSupervisorImpl, type StreamSupervisorDeps } from './reliability/supervisor';
@@ -263,6 +268,19 @@ export class SimplerCameraCard extends LitElement {
   /** Built on first connect with config + hass; destroyed on disconnect. */
   private _supervisor?: StreamSupervisorImpl;
 
+  /**
+   * Gesture recognizer for `tap_action` / `hold_action` / `double_tap_action`.
+   *
+   * It reads `_config` through a getter rather than being handed a snapshot, so
+   * a Lovelace config edit changes behaviour without re-attaching listeners.
+   * `hass-action` is dispatched from the host element (`this`), not the inner
+   * container, so it leaves the shadow root from the node Lovelace knows.
+   */
+  private readonly _actions = new ActionController({
+    getConfig: () => this._config,
+    getEventTarget: () => this,
+  });
+
   /** Resolver actually in use — the real one unless a test overrode it. */
   private get _endpoint(): EndpointResolver {
     return this.supervisorOverrides?.endpoint ?? endpointResolver;
@@ -343,6 +361,11 @@ export class SimplerCameraCard extends LitElement {
     document.addEventListener('resume', this._onPageResumed);
     window.addEventListener('pageshow', this._onPageResumed);
     window.addEventListener('online', this._onPageResumed);
+    // `updated()` covers every render, but a card that is removed and re-added
+    // without any property change never renders again — so re-attach here too.
+    void this.updateComplete.then(() => {
+      if (this.isConnected) this._syncActionTarget();
+    });
     this._maybeStart();
   }
 
@@ -351,8 +374,26 @@ export class SimplerCameraCard extends LitElement {
     document.removeEventListener('resume', this._onPageResumed);
     window.removeEventListener('pageshow', this._onPageResumed);
     window.removeEventListener('online', this._onPageResumed);
+    this._actions.detach();
     this._stopSupervisor();
     super.disconnectedCallback();
+  }
+
+  protected updated(changed: PropertyValues): void {
+    super.updated(changed);
+    this._syncActionTarget();
+  }
+
+  /**
+   * Keep the gesture recognizer bound to the live `.container` node. The node is
+   * stable in practice (Lit reuses it), so this is normally a no-op; it exists
+   * so nothing silently loses its listeners if the template ever changes shape.
+   */
+  private _syncActionTarget(): void {
+    const container = this.shadowRoot?.querySelector<HTMLElement>('.container') ?? null;
+    if (container === this._actions.target) return;
+    if (container) this._actions.attach(container);
+    else this._actions.detach();
   }
 
   private readonly _onVisibilityChange = (): void => {
@@ -518,10 +559,20 @@ export class SimplerCameraCard extends LitElement {
     const poster = live ? undefined : (this._posterUrl ?? entity?.attributes?.entity_picture);
     const overlayText = this._overlayText(config, entity?.attributes?.friendly_name);
     const status = live ? undefined : this._statusText(Boolean(entity));
+    // Only a card whose *tap* does something is announced (and focusable) as a
+    // button — see `isInteractive`.
+    const interactive = isInteractive(config);
+    const label = entity?.attributes?.friendly_name ?? config.camera;
 
     return html`
       <ha-card>
-        <div class="container" style="aspect-ratio: ${config.aspect_ratio};">
+        <div
+          class="container${interactive ? ' interactive' : ''}"
+          style="aspect-ratio: ${config.aspect_ratio};"
+          role=${interactive ? 'button' : nothing}
+          tabindex=${interactive ? '0' : nothing}
+          aria-label=${interactive ? label : nothing}
+        >
           ${poster ? html`<img class="poster" src=${poster} alt="" aria-hidden="true" />` : nothing}
           ${this._video} ${overlayText ? html`<div class="overlay">${overlayText}</div>` : nothing}
           ${status ? html`<div class="status">${status}</div>` : nothing}
@@ -584,6 +635,26 @@ export class SimplerCameraCard extends LitElement {
       /* aspect-ratio is set inline from config; 16 / 9 by default. */
     }
 
+    /*
+     * Only present when tap_action is not "none". touch-action: manipulation
+     * drops the browser's own double-tap-to-zoom (and the ~300 ms click delay
+     * that comes with it) without disabling the scroll that a dashboard needs;
+     * disabling selection stops a hold from turning into a text/image selection
+     * or an iOS callout on top of the gesture.
+     */
+    .container.interactive {
+      cursor: pointer;
+      touch-action: manipulation;
+      -webkit-user-select: none;
+      user-select: none;
+    }
+
+    /* The container is focusable when interactive, so it needs a focus ring. */
+    .container.interactive:focus-visible {
+      outline: 2px solid var(--primary-color, #03a9f4);
+      outline-offset: -2px;
+    }
+
     .poster,
     .video {
       position: absolute;
@@ -592,6 +663,13 @@ export class SimplerCameraCard extends LitElement {
       height: 100%;
       object-fit: contain;
       display: block;
+      /*
+       * The gesture surface is the container, full stop. Making the media layers
+       * transparent to pointers keeps a press off the browser's own image/video
+       * affordances (drag-to-save, media context menus) — the events would have
+       * bubbled up anyway, but from a target we do not control.
+       */
+      pointer-events: none;
     }
 
     /*

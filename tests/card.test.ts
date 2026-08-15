@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { DOUBLE_TAP_MS, HOLD_MS, type HassActionDetail } from '../src/actions';
 import { SimplerCameraCard, normalizeConfig } from '../src/card';
 import type { StreamSupervisorDeps } from '../src/reliability/supervisor';
 import {
@@ -107,9 +108,48 @@ function statusText(card: SimplerCameraCard): string | undefined {
   return card.shadowRoot?.querySelector('.status')?.textContent?.trim();
 }
 
+function container(card: SimplerCameraCard): HTMLElement {
+  const element = card.shadowRoot?.querySelector<HTMLElement>('.container');
+  if (!element) throw new Error('card has not rendered a .container');
+  return element;
+}
+
+/** Every `hass-action` the card lets escape, cleaned up after each test. */
+function collectHassActions(): HassActionDetail[] {
+  const seen: HassActionDetail[] = [];
+  const listener = (event: Event): void => {
+    seen.push((event as CustomEvent<HassActionDetail>).detail);
+  };
+  document.addEventListener('hass-action', listener);
+  hassActionCleanups.push(() => document.removeEventListener('hass-action', listener));
+  return seen;
+}
+
+let hassActionCleanups: (() => void)[] = [];
+
+function pointer(type: string, init: PointerEventInit = {}): PointerEvent {
+  return new PointerEvent(type, {
+    bubbles: true,
+    composed: true,
+    pointerId: 1,
+    isPrimary: true,
+    button: 0,
+    clientX: 40,
+    clientY: 40,
+    ...init,
+  });
+}
+
+function tapOn(target: HTMLElement): void {
+  target.dispatchEvent(pointer('pointerdown'));
+  target.dispatchEvent(pointer('pointerup'));
+}
+
 afterEach(() => {
   vi.useRealTimers();
   document.querySelectorAll(CARD_TAG).forEach((card) => card.remove());
+  for (const undo of hassActionCleanups) undo();
+  hassActionCleanups = [];
 });
 
 describe('normalizeConfig — required fields', () => {
@@ -491,6 +531,129 @@ describe('SimplerCameraCard — lifecycle plumbing', () => {
     await vi.advanceTimersByTimeAsync(HIDDEN_TEARDOWN_GRACE_MS + TIER1_RETRY_DELAY_MS);
 
     expect(players).toHaveLength(1);
+  });
+});
+
+describe('SimplerCameraCard — actions', () => {
+  it('fires hass-action from the host with the camera entity and every slot', async () => {
+    const fired = collectHassActions();
+    const card = mountCard(
+      { ...base, hold_action: { action: 'navigate', navigation_path: '/lovelace/cams' } },
+      { endpoint: neverResolves() },
+    );
+    await settle(card);
+
+    tapOn(container(card));
+
+    expect(fired).toEqual([
+      {
+        action: 'tap',
+        config: {
+          entity: 'camera.front_yard',
+          tap_action: { action: 'more-info' },
+          hold_action: { action: 'navigate', navigation_path: '/lovelace/cams' },
+          double_tap_action: { action: 'none' },
+        },
+      },
+    ]);
+  });
+
+  it('lets the event out of the shadow root by way of the host element', async () => {
+    const card = mountCard(base, { endpoint: neverResolves() });
+    await settle(card);
+
+    const targets: EventTarget[] = [];
+    document.addEventListener('hass-action', (event) => targets.push(event.target!), {
+      once: true,
+    });
+    tapOn(container(card));
+
+    expect(targets).toEqual([card]);
+  });
+
+  it('recognises hold and double-tap once they are configured', async () => {
+    vi.useFakeTimers();
+    const fired = collectHassActions();
+    const card = mountCard(
+      {
+        ...base,
+        hold_action: { action: 'toggle' },
+        double_tap_action: { action: 'url', url_path: '/wall' },
+      },
+      { endpoint: neverResolves() },
+    );
+    await settle(card);
+    const surface = container(card);
+
+    surface.dispatchEvent(pointer('pointerdown'));
+    vi.advanceTimersByTime(HOLD_MS);
+    surface.dispatchEvent(pointer('pointerup'));
+
+    tapOn(surface);
+    tapOn(surface);
+    vi.advanceTimersByTime(DOUBLE_TAP_MS * 2);
+
+    expect(fired.map((detail) => detail.action)).toEqual(['hold', 'double_tap']);
+  });
+
+  it('picks up a config edit without being re-wired', async () => {
+    const fired = collectHassActions();
+    const card = mountCard(base, { endpoint: neverResolves() });
+    await settle(card);
+
+    card.setConfig({ ...base, tap_action: { action: 'toggle' } });
+    await settle(card);
+    tapOn(container(card));
+
+    expect(fired[0].config.tap_action).toEqual({ action: 'toggle' });
+  });
+
+  it('exposes button semantics only while the tap action does something', async () => {
+    const card = mountCard(base, { endpoint: neverResolves() });
+    await settle(card);
+
+    let surface = container(card);
+    expect(surface.getAttribute('role')).toBe('button');
+    expect(surface.getAttribute('tabindex')).toBe('0');
+    expect(surface.getAttribute('aria-label')).toBe('Front Yard');
+    expect(surface.className).toContain('interactive');
+
+    card.setConfig({ ...base, tap_action: { action: 'none' } });
+    await settle(card);
+
+    surface = container(card);
+    expect(surface.hasAttribute('role')).toBe(false);
+    expect(surface.hasAttribute('tabindex')).toBe(false);
+    expect(surface.hasAttribute('aria-label')).toBe(false);
+    expect(surface.className).not.toContain('interactive');
+  });
+
+  it('activates from the keyboard', async () => {
+    const fired = collectHassActions();
+    const card = mountCard(base, { endpoint: neverResolves() });
+    await settle(card);
+
+    container(card).dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+    );
+
+    expect(fired.map((detail) => detail.action)).toEqual(['tap']);
+  });
+
+  it('stops listening once the card leaves the DOM, and listens again on return', async () => {
+    const fired = collectHassActions();
+    const card = mountCard(base, { endpoint: neverResolves() });
+    await settle(card);
+    const surface = container(card);
+
+    card.remove();
+    tapOn(surface);
+    expect(fired).toEqual([]);
+
+    document.body.appendChild(card);
+    await settle(card);
+    tapOn(container(card));
+    expect(fired.map((detail) => detail.action)).toEqual(['tap']);
   });
 });
 
