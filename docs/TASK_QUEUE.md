@@ -21,4 +21,4 @@ How to process/manage the Task Queue:
 
 1. ROOT_SPEC.md [in-progress]
    1. Implement the initial specification.
-   2. Status: spec approved 2026-08-15; starting slice 1 (Scaffolding).
+   2. Status: slice 1 (Scaffolding) done — commit fe1812d, `make check` green. Next: slice 2 (Contracts + card skeleton).
