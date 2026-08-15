@@ -21,4 +21,4 @@ How to process/manage the Task Queue:
 
 1. ROOT_SPEC.md [in-progress]
    1. Implement the initial specification.
-   2. Status: slices 1–7 done (slice 7: e2dbe05), `make check` green (263 tests) + integration suite green. Next: slice 8 (docs + release polish), then orchestrator e2e vs real HA+Frigate (incl. WebRTC idle-WS soak through the HA proxy).
+   2. Status: ALL 8 slices done (slice 8: cb36f7e), v0.1.0. `make check` green (264 tests) + integration suite green (3 tests vs real go2rtc). Remaining before task completion: orchestrator e2e vs real HA+Frigate (visual, tap actions, HA-restart recovery, WebRTC soak >2 min through the HA proxy) — needs James's HA reachable — then James's acceptance.
