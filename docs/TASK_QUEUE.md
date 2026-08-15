@@ -21,4 +21,4 @@ How to process/manage the Task Queue:
 
 1. ROOT_SPEC.md [in-progress]
    1. Implement the initial specification.
-   2. Status: slices 1–5 done (slice 5: 9625579), `make check` green (185 tests) + integration suite green (3 tests vs real go2rtc). Next: slice 6 (features — actions via hass-action, getStubConfig polish, reload escape hatch config already wired).
+   2. Status: slices 1–6 done (slice 6: 9055b33), `make check` green (222 tests) + integration suite green. Next: slice 7 (WebRTC opt-in transport), then slice 8 (docs + release polish).
