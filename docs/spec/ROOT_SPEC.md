@@ -1,6 +1,6 @@
 # SPEC: Simpler Camera Card
 
-- **Status:** draft
+- **Status:** approved
 - **Addenda:** (none)
 
 ## Summary
@@ -125,3 +125,4 @@ States: `idle → connecting → playing → retrying(tier1) → remounting(tier
 ## Change Log
 
 - 2026-08-15 — created from research (`docs/idea/research-notes.md`) and first-run decisions.
+- 2026-08-15 — approved by James; status draft → approved.

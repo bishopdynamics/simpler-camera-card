@@ -19,8 +19,6 @@ How to process/manage the Task Queue:
 
 ## Queue
 
-1. Initial Planning [in-progress]
-   1. Read `docs/idea/initial-idea.md`.
-   2. Discuss, help the user flesh out the idea, research, discuss again, then write `docs/spec/ROOT_SPEC.md` (start from `docs/spec/SPEC_TEMPLATE.md`).
-2. ROOT_SPEC.md
+1. ROOT_SPEC.md [in-progress]
    1. Implement the initial specification.
+   2. Status: spec approved 2026-08-15; starting slice 1 (Scaffolding).
