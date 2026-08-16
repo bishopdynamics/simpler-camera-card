@@ -50,8 +50,8 @@ make setup     # npm install
 make build     # -> dist/simpler-camera-card.js
 ```
 
-`dist/` is not committed, so building (or taking the file from a release artifact) is the way to get
-the bundle.
+A pre-built `dist/simpler-camera-card.js` is committed to the repo, so you can also just download it
+without building anything.
 
 ### Add it to Home Assistant
 
@@ -213,8 +213,9 @@ signing), `src/player/` (go2rtc websocket protocol, MSE and WebRTC lanes), `src/
 - `version` in `package.json`
 - `CARD_VERSION` in `src/index.ts` (this is what the console banner prints)
 
-Bump both, rebuild, and remember that every installation must bump its `?v=` query string to actually
-pick the new bundle up.
+Bump both, rebuild, and **commit the rebuilt `dist/`** (HACS and download installs fetch it straight
+from the repo). Every installation must then bump its `?v=` query string to actually pick the new
+bundle up.
 
 This repo is driven by a spec/task-queue workflow — see `CLAUDE.md` and `docs/`.
 

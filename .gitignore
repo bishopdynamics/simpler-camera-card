@@ -18,7 +18,9 @@ venv/
 .mypy_cache/
 .ruff_cache/
 build/
-dist/
+# dist/ is deliberately COMMITTED (2026-08-15): HACS and manual installs
+# download dist/simpler-camera-card.js straight from the repo. Rebuild and
+# commit it on every release (see README "Releasing").
 
 # --- Node ---
 node_modules/
