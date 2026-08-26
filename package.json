@@ -1,6 +1,9 @@
 {
   "name": "simpler-camera-card",
   "version": "0.1.1",
+  "engines": {
+    "node": ">=20.16"
+  },
   "description": "A simpler, more robust Home Assistant camera card for Frigate — single-camera live view via go2rtc that survives network blips on long-running dashboards.",
   "type": "module",
   "private": true,

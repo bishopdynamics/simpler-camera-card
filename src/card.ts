@@ -26,6 +26,7 @@
 import { LitElement, css, html, nothing, type PropertyValues, type TemplateResult } from 'lit';
 import { state } from 'lit/decorators.js';
 import { ActionController, isInteractive } from './actions';
+import { buildConfigForm, type ConfigForm } from './editor';
 import { endpointResolver } from './endpoint';
 import { MsePlayer } from './player/mse-player';
 import { WebRtcPlayer } from './player/webrtc-player';
@@ -530,6 +531,16 @@ export class SimplerCameraCard extends LitElement {
       entities.find((id) => id.startsWith('camera.')) ??
       'camera.front_yard';
     return { type: CARD_TYPE, camera };
+  }
+
+  /**
+   * The visual editor. Home Assistant renders the form itself from the selector
+   * schema in `editor.ts`; `normalizeConfig` is handed over as the fidelity
+   * guard, so a config the form cannot represent throws and HA falls back to
+   * the YAML editor rather than mangling it.
+   */
+  static getConfigForm(): ConfigForm {
+    return buildConfigForm(normalizeConfig);
   }
 
   protected render(): TemplateResult | typeof nothing {

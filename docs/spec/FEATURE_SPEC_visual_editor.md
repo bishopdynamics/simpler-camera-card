@@ -1,6 +1,6 @@
 # SPEC: Visual Editor
 
-- **Status:** draft
+- **Status:** in-progress
 
 ## Summary
 
@@ -32,7 +32,7 @@ Give the card a visual (GUI) config editor in the Lovelace dashboard, so every o
 | `aspect_ratio` | `text` selector | The accepted grammar (`"16:9"`, `"16/9"`, bare number) is a string format; a number selector would lose the `W:H` form. Helper text shows examples. |
 | `stream`, `overlay_text` | `text` selector | Free-form strings. |
 | `reload_after_minutes_down` | `number` selector, `min: 0`, box mode, unit `min` | 0-disables semantics stated in helper text. |
-| Form layout | Top-level: camera, transport, overlay, overlay_text, aspect_ratio; expandable **Interactions**: the three actions; expandable **Advanced**: stream, reload_after_minutes_down | Keeps the common path shallow. Expandable sections use `flatten: true`-equivalent naming (name-less groups) so the emitted config stays flat — the card's config has no nesting. |
+| Form layout | Top-level: camera, transport, overlay, overlay_text, aspect_ratio; expandable **Interactions**: the three actions; expandable **Advanced**: stream, reload_after_minutes_down | Keeps the common path shallow. Expandable sections set `flatten: true` (ha-form requires `name` on every node; the name is inert once flattened) so the emitted config stays flat — the card's config has no nesting. |
 | Config fidelity guard | `assertConfig` runs `normalizeConfig` (re-exported from `card.ts`) and throws on failure | One validator, two consumers; the form editor auto-disables into YAML mode on configs the schema can't hold, instead of corrupting them. |
 | Labels & helper text | `computeLabel` / `computeHelper` maps over a local table; English only | The card has no i18n infrastructure; introducing one for 10 labels is not worth it. Follow-up if localization is ever requested. |
 | Where the code lives | New `src/editor.ts` owning the schema + label tables; `card.ts` gains only the `static getConfigForm()` delegation | Keeps `card.ts` focused; schema is independently unit-testable. |
@@ -44,7 +44,7 @@ Give the card a visual (GUI) config editor in the Lovelace dashboard, so every o
   - `assertConfig: (config) => { normalizeConfig(config); }` — exceptions propagate; HA shows the message (already written for humans) and drops to the YAML editor.
   - Label/helper tables are plain `Record<string, string>` keyed by field name; `computeLabel`/`computeHelper` look up `schema.name` with a fallback to the raw name.
 - `card.ts`: `static getConfigForm() { return buildConfigForm(); }` — nothing else changes.
-- Grouping: "Interactions" and "Advanced" are `type: "expandable"` schema nodes without a `name` (or with `flatten` where required by the HA schema shape — worker verifies against the live HA frontend types) so nested rendering does not introduce nested config keys.
+- Grouping: "Interactions" and "Advanced" are named `type: "expandable"` schema nodes with `flatten: true`, so nested rendering does not introduce nested config keys. (Verified against `home-assistant/frontend` `ha-form` types/source during slice 1: `name` is required on every node; `flatten` is what keeps reads and writes on the top-level object.)
 - Unknown keys Lovelace injects (`view_layout`, `grid_options`, …) are untouched: the form editor only writes keys named in the schema, and `normalizeConfig` already ignores the rest.
 
 ## Implementation Plan
@@ -69,3 +69,5 @@ Give the card a visual (GUI) config editor in the Lovelace dashboard, so every o
 ## Change Log
 
 - 2026-08-26 — created (draft, pending James's approval).
+- 2026-08-26 — approved by James; slice 1 dispatched.
+- 2026-08-26 — slice 1 done (Opus worker, orchestrator-verified: 285 tests). Spec correction from field-verified HA source: expandables need `name` + `flatten: true`, not name-less nodes.

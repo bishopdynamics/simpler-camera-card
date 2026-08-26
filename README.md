@@ -74,6 +74,12 @@ category *Dashboard* works; otherwise use the manual `/local/` install above.
 
 ## Configuration
 
+Every option below can be set from the **visual editor** — Home Assistant renders a native form for
+the card, with a Frigate-filtered camera picker and HA's standard action editors, so no YAML is
+required. The YAML reference is here because it is still the precise description of what each option
+does (and because a config the form cannot represent drops back to the YAML editor rather than being
+rewritten).
+
 Minimal — everything else has a default:
 
 ```yaml
