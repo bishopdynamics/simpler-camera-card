@@ -11,7 +11,8 @@ and the agent then removes it from this list.
 One line per item: `- <what> — from docs/spec/<file>.md (YYYY-MM-DD)`
 
 - Audio playback support (v1 is muted-only) — from docs/spec/ROOT_SPEC.md (2026-08-15)
-- Visual config editor (`getConfigElement`) — from docs/spec/ROOT_SPEC.md (2026-08-15)
+- Localized visual-editor labels (i18n for `computeLabel`) — from docs/spec/FEATURE_SPEC_visual_editor.md (2026-08-26)
+- Card-picker preview image/thumbnail polish — from docs/spec/FEATURE_SPEC_visual_editor.md (2026-08-26)
 - HACS default-store submission — from docs/spec/ROOT_SPEC.md (2026-08-15)
 - Snapshot-refresh transport (ultra-low-power camera_proxy cycling) — from docs/spec/ROOT_SPEC.md (2026-08-15)
 - Direct-to-Frigate endpoint override for setups without frigate-hass-integration — from docs/spec/ROOT_SPEC.md (2026-08-15)

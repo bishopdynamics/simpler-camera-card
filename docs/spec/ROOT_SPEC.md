@@ -1,7 +1,7 @@
 # SPEC: Simpler Camera Card
 
 - **Status:** approved
-- **Addenda:** (none)
+- **Addenda:** `FEATURE_SPEC_visual_editor.md` (visual config editor via `getConfigForm`)
 
 ## Summary
 
