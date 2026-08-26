@@ -1994,7 +1994,7 @@ function Bt(e, t) {
 customElements.get("simpler-camera-card") || customElements.define(I, $);
 //#endregion
 //#region src/index.ts
-var Vt = "0.1.1";
+var Vt = "0.2.0";
 window.customCards = window.customCards ?? [], window.customCards.some((e) => e.type === "simpler-camera-card") || window.customCards.push({
 	type: I,
 	name: "Simpler Camera Card",
