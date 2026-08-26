@@ -57,6 +57,36 @@ export class EndpointError extends Error {
 }
 
 /**
+ * Last-known-good Frigate attributes, per camera entity id.
+ *
+ * When a camera stops feeding Frigate, frigate-hass-integration flips the
+ * entity to `unavailable` and HA strips its attributes — including `client_id`
+ * and `camera_name`, which say nothing about the physical camera and are still
+ * perfectly valid for building the proxy path. go2rtc meanwhile keeps serving
+ * the stream (Frigate substitutes its "No frames have been received" card), so
+ * failing resolution here would turn a working stream into a permanent
+ * "not a Frigate camera" retry loop. Falling back to the values from the last
+ * successful resolution keeps reconnects working through the outage.
+ *
+ * Module-level on purpose: the attributes are properties of the entity, so the
+ * cache is shared by every card instance and survives config edits.
+ */
+const lastKnownFrigateAttributes = new Map<
+  string,
+  { clientId: string; cameraName: string | undefined }
+>();
+
+/** Test hook: drop every cached attribute set. */
+export function clearFrigateAttributeCache(): void {
+  lastKnownFrigateAttributes.clear();
+}
+
+/** The value when it is a non-empty string, else `undefined`. */
+function nonEmptyString(value: unknown): string | undefined {
+  return typeof value === 'string' && value !== '' ? value : undefined;
+}
+
+/**
  * Look up the configured camera entity.
  *
  * @throws {EndpointError} `entity-not-found` when it is absent from `hass.states`.
@@ -81,13 +111,35 @@ export function getCameraEntity(hass: HomeAssistant, entityId: string): CameraEn
  * (`<camera>_sub`) are selected, since HA exposes no stream selector — and
  * otherwise from the entity's `camera_name`.
  *
+ * An entity whose attributes are stripped (HA does this while it is
+ * `unavailable`) resolves from {@link lastKnownFrigateAttributes} instead, so a
+ * camera outage at the Frigate end never breaks the go2rtc path. Only an entity
+ * that has *never* resolved fails — with a message that blames the entity's
+ * availability, not the integration version, when `unavailable` is the reason.
+ *
  * @throws {EndpointError} `entity-not-found`, `missing-client-id`, `missing-stream-name`
  */
 export function buildGo2rtcWsPath(hass: HomeAssistant, config: SimplerCameraCardConfig): string {
   const entity = getCameraEntity(hass, config.camera);
+  const cached = lastKnownFrigateAttributes.get(config.camera);
 
-  const clientId = entity.attributes?.client_id;
-  if (typeof clientId !== 'string' || clientId === '') {
+  const liveClientId = nonEmptyString(entity.attributes?.client_id);
+  const liveCameraName = nonEmptyString(entity.attributes?.camera_name);
+  if (liveClientId !== undefined) {
+    lastKnownFrigateAttributes.set(config.camera, {
+      clientId: liveClientId,
+      cameraName: liveCameraName,
+    });
+  }
+
+  const clientId = liveClientId ?? cached?.clientId;
+  if (clientId === undefined) {
+    if (entity.state === 'unavailable') {
+      throw new EndpointError(
+        'missing-client-id',
+        `Camera entity "${config.camera}" is currently unavailable in Home Assistant.`,
+      );
+    }
     throw new EndpointError(
       'missing-client-id',
       `Camera entity "${config.camera}" has no "client_id" attribute, so it is ` +
@@ -95,11 +147,8 @@ export function buildGo2rtcWsPath(hass: HomeAssistant, config: SimplerCameraCard
     );
   }
 
-  const stream =
-    typeof config.stream === 'string' && config.stream !== ''
-      ? config.stream
-      : entity.attributes?.camera_name;
-  if (typeof stream !== 'string' || stream === '') {
+  const stream = nonEmptyString(config.stream) ?? liveCameraName ?? cached?.cameraName;
+  if (stream === undefined) {
     throw new EndpointError(
       'missing-stream-name',
       `Camera entity "${config.camera}" has no "camera_name" attribute. ` +

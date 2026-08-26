@@ -1,5 +1,19 @@
 {
   "version": 1,
-  "tasks": [],
-  "derivedAtMs": 1786577148627
+  "tasks": [
+    {
+      "id": "make:test-integration",
+      "name": "test-integration",
+      "source": "make",
+      "command": "make test-integration"
+    },
+    {
+      "id": "npm:test:integration",
+      "name": "test:integration",
+      "source": "npm",
+      "command": "npm run test:integration",
+      "description": "vitest run --config vitest.integration.config.ts"
+    }
+  ],
+  "derivedAtMs": 1786835809235
 }

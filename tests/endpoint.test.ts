@@ -4,6 +4,7 @@ import {
   SIGNED_PATH_EXPIRY_SECONDS,
   buildCameraProxyPath,
   buildGo2rtcWsPath,
+  clearFrigateAttributeCache,
   endpointResolver,
   resolvePosterUrl,
   resolveSignedWsUrl,
@@ -11,6 +12,11 @@ import {
   toAbsoluteWsUrl,
 } from '../src/endpoint';
 import type { CameraEntity, HomeAssistant, SimplerCameraCardConfig } from '../src/types';
+
+// The last-known-attribute cache is module state; isolate every test from it.
+beforeEach(() => {
+  clearFrigateAttributeCache();
+});
 
 /** A Frigate camera entity as the integration actually exposes it. */
 function cameraEntity(overrides: Partial<CameraEntity['attributes']> = {}): CameraEntity {
@@ -94,6 +100,63 @@ describe('buildGo2rtcWsPath', () => {
     const hass = fakeHass(cameraEntity({ camera_name: undefined }));
     expect(buildGo2rtcWsPath(hass, { ...config, stream: 'explicit' })).toBe(
       '/api/frigate/frigate/go2rtc/ws/api/ws?src=explicit',
+    );
+  });
+
+  describe('unavailable entities (attributes stripped by HA)', () => {
+    /** The entity as HA presents it while unavailable: present, but bare. */
+    function unavailableEntity(): CameraEntity {
+      return {
+        entity_id: 'camera.front_yard',
+        state: 'unavailable',
+        attributes: { friendly_name: 'Front Yard' },
+      };
+    }
+
+    it('falls back to the attributes from the last successful resolution', () => {
+      expect(buildGo2rtcWsPath(fakeHass(), config)).toBe(
+        '/api/frigate/frigate/go2rtc/ws/api/ws?src=front_yard',
+      );
+
+      // Camera stops feeding Frigate: entity flips unavailable, attributes gone.
+      expect(buildGo2rtcWsPath(fakeHass(unavailableEntity()), config)).toBe(
+        '/api/frigate/frigate/go2rtc/ws/api/ws?src=front_yard',
+      );
+    });
+
+    it('reports availability — not integration version — when nothing is cached', () => {
+      expect(() => buildGo2rtcWsPath(fakeHass(unavailableEntity()), config)).toThrowError(
+        expect.objectContaining({
+          code: 'missing-client-id',
+          message: expect.stringContaining('unavailable'),
+        }),
+      );
+    });
+
+    it('does not reuse a cache entry across entity ids', () => {
+      buildGo2rtcWsPath(fakeHass(), config);
+
+      const other = { ...unavailableEntity(), entity_id: 'camera.back_yard' };
+      expect(() => buildGo2rtcWsPath(fakeHass(other), { ...config, camera: 'camera.back_yard' }))
+        .toThrowError(expect.objectContaining({ code: 'missing-client-id' }));
+    });
+
+    it('prefers live attributes over the cache once the entity recovers', () => {
+      buildGo2rtcWsPath(fakeHass(), config);
+      const renamed = fakeHass(cameraEntity({ client_id: 'other', camera_name: 'renamed' }));
+      expect(buildGo2rtcWsPath(renamed, config)).toBe(
+        '/api/frigate/other/go2rtc/ws/api/ws?src=renamed',
+      );
+    });
+  });
+
+  it('still reports an available entity without client_id as not a Frigate camera', () => {
+    const hass = fakeHass(cameraEntity({ client_id: undefined }));
+    expect(() => buildGo2rtcWsPath(hass, config)).toThrowError(
+      expect.objectContaining({
+        code: 'missing-client-id',
+        message: expect.stringContaining('frigate-hass-integration'),
+      }),
     );
   });
 });

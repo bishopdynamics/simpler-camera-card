@@ -469,7 +469,8 @@ export const POSTER_REFRESH_INTERVAL_MS = 10_000;
 export type EndpointErrorCode =
   /** `config.camera` names an entity that is not in `hass.states`. */
   | 'entity-not-found'
-  /** The entity exists but lacks `client_id` (not a Frigate camera?). */
+  /** The entity exists but `client_id` is neither present nor cached from a
+   *  past resolution (not a Frigate camera, or unavailable since page load). */
   | 'missing-client-id'
   /** No `stream` in config and the entity lacks `camera_name`. */
   | 'missing-stream-name'
