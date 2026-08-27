@@ -39,8 +39,8 @@ function harness(configOverrides: Partial<NormalizedCardConfig> = {}) {
   let onCreate: (player: FakePlayer) => void = () => {};
 
   const supervisor = new StreamSupervisorImpl({
-    createPlayer: (transport) => {
-      const player = new FakePlayer(transport);
+    createPlayer: () => {
+      const player = new FakePlayer();
       onCreate(player);
       players.push(player);
       return player;
@@ -159,13 +159,6 @@ describe('happy path', () => {
 
     expect(h.names()).toEqual(['connecting', 'playing']);
     expect(h.watchdog.armCount).toBe(1);
-  });
-
-  it('builds the player for the configured transport', async () => {
-    const h = harness({ transport: 'webrtc' });
-    h.supervisor.start();
-    await h.settle();
-    expect(h.current().transport).toBe('webrtc');
   });
 
   it('start() is a no-op while already started', async () => {

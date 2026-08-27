@@ -82,14 +82,14 @@ describe('outbound messages', () => {
     const { client, socket, onOpen } = connectedClient();
 
     client.send({ type: 'mse', value: 'avc1.640029' });
-    client.send({ type: 'webrtc/candidate', value: 'candidate:1' });
+    client.send({ type: 'ping', value: 'keepalive' });
     expect(socket.sent).toEqual([]);
 
     socket.serverOpen();
 
     expect(socket.sentMessages).toEqual([
       { type: 'mse', value: 'avc1.640029' },
-      { type: 'webrtc/candidate', value: 'candidate:1' },
+      { type: 'ping', value: 'keepalive' },
     ]);
     // The queue is flushed before the owner is told the socket is open.
     expect(onOpen).toHaveBeenCalledTimes(1);
@@ -124,16 +124,16 @@ describe('JSON lane', () => {
   it('dispatches messages to the subscribers of their type', () => {
     const { client, socket } = connectedClient();
     const onMse = vi.fn<(message: Go2rtcMessage) => void>();
-    const onAnswer = vi.fn<(message: Go2rtcMessage) => void>();
+    const onOther = vi.fn<(message: Go2rtcMessage) => void>();
     client.on('mse', onMse);
-    client.on('webrtc/answer', onAnswer);
+    client.on('ping', onOther);
     socket.serverOpen();
 
     socket.serverJson({ type: 'mse', value: 'video/mp4; codecs="avc1.640029"' });
 
     expect(onMse).toHaveBeenCalledTimes(1);
     expect(onMse).toHaveBeenCalledWith({ type: 'mse', value: 'video/mp4; codecs="avc1.640029"' });
-    expect(onAnswer).not.toHaveBeenCalled();
+    expect(onOther).not.toHaveBeenCalled();
   });
 
   it('supports several subscribers per type, and unsubscribing', () => {

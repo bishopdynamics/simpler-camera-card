@@ -29,7 +29,7 @@
  *
  * ```ts
  * const supervisor = new StreamSupervisorImpl({
- *   createPlayer: (transport) => (transport === 'webrtc' ? new WebRtcPlayer() : new MsePlayer()),
+ *   createPlayer: () => new MsePlayer(),
  *   endpoint: endpointResolver,
  *   getHass: () => this.hass,
  *   getVideo: () => this.videoElement,
@@ -86,7 +86,7 @@ export interface SupervisorLogger {
  * can be called again at any time.
  */
 export interface StreamSupervisorDeps {
-  /** Builds a player for a transport. Called once per attempt. */
+  /** Builds a player. Called once per attempt. */
   createPlayer: PlayerFactory;
   /** Signs a fresh go2rtc URL per attempt. Never cached — that is the point. */
   endpoint: EndpointResolver;
@@ -94,7 +94,7 @@ export interface StreamSupervisorDeps {
   getHass: () => HomeAssistant | null | undefined;
   /** The mounted `<video>`. Returning nullish makes the attempt fail (and retry). */
   getVideo: () => HTMLVideoElement | null | undefined;
-  /** The normalized config: transport and `reload_after_minutes_down`. */
+  /** The normalized config; the supervisor reads `reload_after_minutes_down`. */
   getConfig: () => NormalizedCardConfig;
 
   /**
@@ -297,7 +297,7 @@ export class StreamSupervisorImpl implements StreamSupervisor {
     void this.deps.endpoint.resolveSignedWsUrl(hass, config).then(
       (url) => {
         if (!this.isCurrent(generation)) return;
-        this.mountPlayer(config, video, url, generation);
+        this.mountPlayer(video, url, generation);
       },
       (error: unknown) => {
         if (!this.isCurrent(generation)) return;
@@ -306,15 +306,10 @@ export class StreamSupervisorImpl implements StreamSupervisor {
     );
   }
 
-  private mountPlayer(
-    config: NormalizedCardConfig,
-    video: HTMLVideoElement,
-    url: string,
-    generation: number,
-  ): void {
+  private mountPlayer(video: HTMLVideoElement, url: string, generation: number): void {
     let player: LivePlayer;
     try {
-      player = this.deps.createPlayer(config.transport);
+      player = this.deps.createPlayer();
     } catch (error) {
       this.handleDeath('media-error', describeError(error));
       return;

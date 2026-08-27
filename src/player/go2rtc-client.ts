@@ -6,16 +6,13 @@
  * `{ type, value }`, the server replies with JSON messages of the same shape,
  * and — once a media lane has been negotiated — pushes the media itself as
  * **binary** frames on the same socket. For MSE those binary frames are fMP4
- * boxes (`ftyp`+`moov`, then a stream of `moof`+`mdat`); for WebRTC there are
- * no binary frames at all, only `webrtc/offer`, `webrtc/answer` and
- * `webrtc/candidate` JSON messages.
+ * boxes (`ftyp`+`moov`, then a stream of `moof`+`mdat`).
  *
- * This client is therefore deliberately transport-agnostic:
+ * This client knows nothing about any particular lane:
  *
  * - **JSON lane** — subscribe by message `type` with {@link Go2rtcClient.on}.
- *   The MSE player subscribes to `mse`; slice 7's WebRTC player subscribes to
- *   `webrtc/answer` and `webrtc/candidate` over the *same* client, with no
- *   change needed here.
+ *   The MSE player subscribes to `mse`; any other message type can be
+ *   subscribed to over the *same* client with no change needed here.
  * - **Binary lane** — a single {@link Go2rtcClient.onBinary} handler, because
  *   only one media lane is ever active per socket.
  *
@@ -155,8 +152,8 @@ export class Go2rtcClient {
   }
 
   /**
-   * Subscribe to every JSON message of one `type` (e.g. `mse`,
-   * `webrtc/answer`). Returns an unsubscribe function.
+   * Subscribe to every JSON message of one `type` (e.g. `mse`). Returns an
+   * unsubscribe function.
    */
   on(type: string, handler: Go2rtcMessageHandler): Unsubscribe {
     if (this.finished) return () => {};

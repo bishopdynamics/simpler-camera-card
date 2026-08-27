@@ -182,6 +182,8 @@ export class Go2rtcServer {
       '  origin: "*"',
       'rtsp:',
       `  listen: "127.0.0.1:${this.rtspPort}"`,
+      // go2rtc's own listeners, not card config: the card is MSE-only, so
+      // these stay switched off rather than binding :8555 for every rig run.
       'webrtc:',
       '  listen: ""',
       'srtp:',

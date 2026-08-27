@@ -36,7 +36,7 @@
  * The player is one-shot and owns no recovery: every failure funnels into
  * `onDead(reason)` exactly once, and the supervisor decides what happens next.
  * Stall detection is deliberately absent — the watchdog in `reliability/`
- * covers connected-but-frozen streams for every transport.
+ * covers connected-but-frozen streams at the element level.
  */
 
 import { HANDSHAKE_TIMEOUT_MS, type DeathReason, type LivePlayer } from '../types';

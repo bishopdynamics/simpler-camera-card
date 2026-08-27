@@ -1,7 +1,7 @@
 # SPEC: Simpler Camera Card
 
 - **Status:** approved
-- **Addenda:** `FEATURE_SPEC_visual_editor.md` (visual config editor via `getConfigForm`)
+- **Addenda:** `FEATURE_SPEC_visual_editor.md` (visual config editor via `getConfigForm`); `FEATURE_SPEC_remove_webrtc.md` (removes the WebRTC transport — supersedes this spec's "WebRTC as opt-in low-latency mode" goal and slice 7)
 
 ## Summary
 

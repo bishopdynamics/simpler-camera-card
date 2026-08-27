@@ -4,7 +4,6 @@ import { SimplerCameraCard, normalizeConfig } from '../src/card';
 import type { StreamSupervisorDeps } from '../src/reliability/supervisor';
 import {
   FakeMediaSource,
-  FakePeerConnection,
   FakeWebSocket,
   installObjectUrlStubs,
 } from './player/stubs';
@@ -192,7 +191,6 @@ describe('normalizeConfig — defaults', () => {
     expect(normalizeConfig(base)).toEqual({
       type: CARD_TYPE,
       camera: 'camera.front_yard',
-      transport: 'mse',
       overlay: 'none',
       tap_action: { action: 'more-info' },
       hold_action: { action: 'none' },
@@ -209,17 +207,6 @@ describe('normalizeConfig — defaults', () => {
 });
 
 describe('normalizeConfig — enums', () => {
-  it('accepts both transports', () => {
-    expect(normalizeConfig({ ...base, transport: 'webrtc' }).transport).toBe('webrtc');
-    expect(normalizeConfig({ ...base, transport: 'mse' }).transport).toBe('mse');
-  });
-
-  it('rejects an unknown transport', () => {
-    expect(() => normalizeConfig({ ...base, transport: 'hls' })).toThrow(
-      /"transport" must be one of/,
-    );
-  });
-
   it('rejects an unknown overlay mode', () => {
     expect(() => normalizeConfig({ ...base, overlay: 'label' })).toThrow(
       /"overlay" must be one of/,
@@ -329,39 +316,32 @@ describe('SimplerCameraCard element', () => {
     expect(SimplerCameraCard.getStubConfig(fakeHass()).camera).toMatch(/^camera\./);
   });
 
-  it('accepts transport: webrtc', () => {
+  it('still accepts a pre-0.3.0 config carrying transport:', () => {
+    // WebRTC was removed in 0.3.0. `transport:` is not migrated or warned
+    // about — it degrades to one more unknown key, so dashboards written
+    // against 0.2.x keep working untouched.
     const card = new SimplerCameraCard();
     expect(normalizeConfig({ ...base, transport: 'webrtc' }).transport).toBe('webrtc');
     expect(() => card.setConfig({ ...base, transport: 'webrtc' })).not.toThrow();
   });
 
-  it('builds a WebRTC player for transport: webrtc, and an MSE one otherwise', async () => {
-    // The factory is internal, so it is observed through what each player
-    // actually opens: the WebRTC one creates an RTCPeerConnection, the MSE one
-    // a MediaSource. Both are read off the globals, which is what makes this a
-    // test of the real wiring rather than of an injected double.
+  it('builds an MSE player', async () => {
+    // The factory is internal, so it is observed through what the player
+    // actually opens: a MediaSource, read off the global. That is what makes
+    // this a test of the real wiring rather than of an injected double.
     vi.stubGlobal('WebSocket', FakeWebSocket);
-    vi.stubGlobal('RTCPeerConnection', FakePeerConnection);
     vi.stubGlobal('MediaSource', FakeMediaSource);
     const restoreObjectUrl = installObjectUrlStubs();
     const info = vi.spyOn(console, 'info').mockImplementation(() => {});
     FakeWebSocket.reset();
-    FakePeerConnection.reset();
     FakeMediaSource.reset();
 
     try {
-      const webrtcCard = mountCard({ ...base, transport: 'webrtc' }, { endpoint: stubEndpoint() });
-      await settle(webrtcCard);
-      expect(FakePeerConnection.instances).toHaveLength(1);
-      expect(FakeMediaSource.instances).toHaveLength(0);
-      expect(FakeWebSocket.last().url).toBe(WS_URL);
-      webrtcCard.remove();
-
-      const mseCard = mountCard({ ...base, transport: 'mse' }, { endpoint: stubEndpoint() });
-      await settle(mseCard);
-      expect(FakePeerConnection.instances).toHaveLength(1);
+      const card = mountCard(base, { endpoint: stubEndpoint() });
+      await settle(card);
       expect(FakeMediaSource.instances).toHaveLength(1);
-      mseCard.remove();
+      expect(FakeWebSocket.last().url).toBe(WS_URL);
+      card.remove();
     } finally {
       info.mockRestore();
       restoreObjectUrl();

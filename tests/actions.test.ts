@@ -18,7 +18,6 @@ function config(overrides: Partial<NormalizedCardConfig> = {}): NormalizedCardCo
   return {
     type: CARD_TYPE,
     camera: 'camera.front_yard',
-    transport: 'mse',
     overlay: 'none',
     tap_action: { action: 'more-info' } as ActionConfig,
     hold_action: { action: 'none' } as ActionConfig,

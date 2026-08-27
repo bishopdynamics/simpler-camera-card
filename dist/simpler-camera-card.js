@@ -58,23 +58,23 @@ var e = globalThis, t = e.ShadowRoot && (e.ShadyCSS === void 0 || e.ShadyCSS.nat
 		}
 		return n;
 	}
-}, h = (e, t) => !l(e, t), oe = {
+}, oe = (e, t) => !l(e, t), se = {
 	attribute: !0,
 	type: String,
 	converter: m,
 	reflect: !1,
 	useDefault: !1,
-	hasChanged: h
+	hasChanged: oe
 };
 Symbol.metadata ??= Symbol("metadata"), f.litPropertyMetadata ??= /* @__PURE__ */ new WeakMap();
-var g = class extends HTMLElement {
+var h = class extends HTMLElement {
 	static addInitializer(e) {
 		this._$Ei(), (this.l ??= []).push(e);
 	}
 	static get observedAttributes() {
 		return this.finalize(), this._$Eh && [...this._$Eh.keys()];
 	}
-	static createProperty(e, t = oe) {
+	static createProperty(e, t = se) {
 		if (t.state && (t.attribute = !1), this._$Ei(), this.prototype.hasOwnProperty(e) && ((t = Object.create(t)).wrapped = !0), this.elementProperties.set(e, t), !t.noAccessor) {
 			let n = Symbol(), r = this.getPropertyDescriptor(e, n, t);
 			r !== void 0 && u(this.prototype, e, r);
@@ -100,7 +100,7 @@ var g = class extends HTMLElement {
 		};
 	}
 	static getPropertyOptions(e) {
-		return this.elementProperties.get(e) ?? oe;
+		return this.elementProperties.get(e) ?? se;
 	}
 	static _$Ei() {
 		if (this.hasOwnProperty(p("elementProperties"))) return;
@@ -187,7 +187,7 @@ var g = class extends HTMLElement {
 	requestUpdate(e, t, n, r = !1, i) {
 		if (e !== void 0) {
 			let a = this.constructor;
-			if (!1 === r && (i = this[e]), n ??= a.getPropertyOptions(e), !((n.hasChanged ?? h)(i, t) || n.useDefault && n.reflect && i === this._$Ej?.get(e) && !this.hasAttribute(a._$Eu(e, n)))) return;
+			if (!1 === r && (i = this[e]), n ??= a.getPropertyOptions(e), !((n.hasChanged ?? oe)(i, t) || n.useDefault && n.reflect && i === this._$Ej?.get(e) && !this.hasAttribute(a._$Eu(e, n)))) return;
 			this.C(e, t, n);
 		}
 		!1 === this.isUpdatePending && (this._$ES = this._$EP());
@@ -251,10 +251,10 @@ var g = class extends HTMLElement {
 	updated(e) {}
 	firstUpdated(e) {}
 };
-g.elementStyles = [], g.shadowRootOptions = { mode: "open" }, g[p("elementProperties")] = /* @__PURE__ */ new Map(), g[p("finalized")] = /* @__PURE__ */ new Map(), ae?.({ ReactiveElement: g }), (f.reactiveElementVersions ??= []).push("2.1.2");
+h.elementStyles = [], h.shadowRootOptions = { mode: "open" }, h[p("elementProperties")] = /* @__PURE__ */ new Map(), h[p("finalized")] = /* @__PURE__ */ new Map(), ae?.({ ReactiveElement: h }), (f.reactiveElementVersions ??= []).push("2.1.2");
 //#endregion
 //#region node_modules/lit-html/lit-html.js
-var se = globalThis, ce = (e) => e, _ = se.trustedTypes, le = _ ? _.createPolicy("lit-html", { createHTML: (e) => e }) : void 0, ue = "$lit$", v = `lit$${Math.random().toFixed(9).slice(2)}$`, de = "?" + v, fe = `<${de}>`, y = document, b = () => y.createComment(""), x = (e) => e === null || typeof e != "object" && typeof e != "function", S = Array.isArray, pe = (e) => S(e) || typeof e?.[Symbol.iterator] == "function", C = "[ 	\n\f\r]", w = /<(?:(!--|\/[^a-zA-Z])|(\/?[a-zA-Z][^>\s]*)|(\/?$))/g, me = /-->/g, he = />/g, T = RegExp(`>|${C}(?:([^\\s"'>=/]+)(${C}*=${C}*(?:[^ \t\n\f\r"'\`<>=]|("|')|))|$)`, "g"), ge = /'/g, _e = /"/g, ve = /^(?:script|style|textarea|title)$/i, E = ((e) => (t, ...n) => ({
+var g = globalThis, ce = (e) => e, _ = g.trustedTypes, le = _ ? _.createPolicy("lit-html", { createHTML: (e) => e }) : void 0, ue = "$lit$", v = `lit$${Math.random().toFixed(9).slice(2)}$`, de = "?" + v, fe = `<${de}>`, y = document, b = () => y.createComment(""), x = (e) => e === null || typeof e != "object" && typeof e != "function", S = Array.isArray, pe = (e) => S(e) || typeof e?.[Symbol.iterator] == "function", C = "[ 	\n\f\r]", w = /<(?:(!--|\/[^a-zA-Z])|(\/?[a-zA-Z][^>\s]*)|(\/?$))/g, me = /-->/g, he = />/g, T = RegExp(`>|${C}(?:([^\\s"'>=/]+)(${C}*=${C}*(?:[^ \t\n\f\r"'\`<>=]|("|')|))|$)`, "g"), ge = /'/g, _e = /"/g, ve = /^(?:script|style|textarea|title)$/i, E = ((e) => (t, ...n) => ({
 	_$litType$: e,
 	strings: t,
 	values: n
@@ -474,8 +474,8 @@ var Se = class {
 	_$AI(e) {
 		j(this, e);
 	}
-}, De = se.litHtmlPolyfillSupport;
-De?.(A, M), (se.litHtmlVersions ??= []).push("3.3.3");
+}, De = g.litHtmlPolyfillSupport;
+De?.(A, M), (g.litHtmlVersions ??= []).push("3.3.3");
 var Oe = (e, t, n) => {
 	let r = n?.renderBefore ?? t, i = r._$litPart$;
 	if (i === void 0) {
@@ -483,7 +483,7 @@ var Oe = (e, t, n) => {
 		r._$litPart$ = i = new M(t.insertBefore(b(), e), e, void 0, n ?? {});
 	}
 	return i._$AI(e), i;
-}, ke = globalThis, P = class extends g {
+}, P = globalThis, F = class extends h {
 	constructor() {
 		super(...arguments), this.renderOptions = { host: this }, this._$Do = void 0;
 	}
@@ -505,18 +505,18 @@ var Oe = (e, t, n) => {
 		return D;
 	}
 };
-P._$litElement$ = !0, P.finalized = !0, ke.litElementHydrateSupport?.({ LitElement: P });
-var Ae = ke.litElementPolyfillSupport;
-Ae?.({ LitElement: P }), (ke.litElementVersions ??= []).push("4.2.2");
+F._$litElement$ = !0, F.finalized = !0, P.litElementHydrateSupport?.({ LitElement: F });
+var ke = P.litElementPolyfillSupport;
+ke?.({ LitElement: F }), (P.litElementVersions ??= []).push("4.2.2");
 //#endregion
 //#region node_modules/@lit/reactive-element/decorators/property.js
-var je = {
+var Ae = {
 	attribute: !0,
 	type: String,
 	converter: m,
 	reflect: !1,
-	hasChanged: h
-}, Me = (e = je, t, n) => {
+	hasChanged: oe
+}, je = (e = Ae, t, n) => {
 	let { kind: r, metadata: i } = n, a = globalThis.litPropertyMetadata.get(i);
 	if (a === void 0 && globalThis.litPropertyMetadata.set(i, a = /* @__PURE__ */ new Map()), r === "setter" && ((e = Object.create(e)).wrapped = !0), a.set(n.name, e), r === "accessor") {
 		let { name: r } = n;
@@ -539,22 +539,22 @@ var je = {
 	}
 	throw Error("Unsupported decorator location: " + r);
 };
-function Ne(e) {
-	return (t, n) => typeof n == "object" ? Me(e, t, n) : ((e, t, n) => {
+function Me(e) {
+	return (t, n) => typeof n == "object" ? je(e, t, n) : ((e, t, n) => {
 		let r = t.hasOwnProperty(n);
 		return t.constructor.createProperty(n, e), r ? Object.getOwnPropertyDescriptor(t, n) : void 0;
 	})(e, t, n);
 }
 //#endregion
 //#region node_modules/@lit/reactive-element/decorators/state.js
-function F(e) {
-	return Ne({
+function I(e) {
+	return Me({
 		...e,
 		state: !0,
 		attribute: !1
 	});
 }
-function Pe(e) {
+function Ne(e) {
 	return {
 		entity: e.camera,
 		tap_action: e.tap_action,
@@ -562,16 +562,16 @@ function Pe(e) {
 		double_tap_action: e.double_tap_action
 	};
 }
-function Fe(e, t) {
+function Pe(e, t) {
 	switch (t) {
 		case "hold": return e.hold_action;
 		case "double_tap": return e.double_tap_action;
 		default: return e.tap_action;
 	}
 }
-function Ie(e, t, n) {
+function Fe(e, t, n) {
 	let r = {
-		config: Pe(t),
+		config: Ne(t),
 		action: n
 	};
 	e.dispatchEvent(new CustomEvent("hass-action", {
@@ -580,10 +580,10 @@ function Ie(e, t, n) {
 		composed: !0
 	}));
 }
-function Le(e) {
+function Ie(e) {
 	return e.tap_action.action !== "none";
 }
-var Re = class {
+var Le = class {
 	constructor(e) {
 		this.targetEl = null, this.gesture = null, this.onPointerDown = (e) => {
 			if (e.isPrimary === !1 || e.button > 0 || this.gesture) return;
@@ -632,7 +632,7 @@ var Re = class {
 		}, this.onKeyDown = (e) => {
 			if (e.repeat || e.key !== "Enter" && e.key !== " " && e.key !== "Spacebar") return;
 			let t = this.options.getConfig();
-			!t || !Le(t) || (e.preventDefault(), this.cancelGesture(), this.clearPendingTap(), this.fire("tap", t));
+			!t || !Ie(t) || (e.preventDefault(), this.cancelGesture(), this.clearPendingTap(), this.fire("tap", t));
 		}, this.options = e;
 	}
 	get target() {
@@ -646,9 +646,9 @@ var Re = class {
 		this.cancelGesture(), this.clearPendingTap(), this.targetEl = null, e && (e.removeEventListener("pointerdown", this.onPointerDown), e.removeEventListener("pointermove", this.onPointerMove), e.removeEventListener("pointerup", this.onPointerUp), e.removeEventListener("pointercancel", this.onPointerCancel), e.removeEventListener("pointerleave", this.onPointerCancel), e.removeEventListener("contextmenu", this.onContextMenu), e.removeEventListener("keydown", this.onKeyDown));
 	}
 	fire(e, t) {
-		if (Fe(t, e).action === "none") return;
+		if (Pe(t, e).action === "none") return;
 		let n = this.options.getEventTarget?.() ?? this.targetEl;
-		n && Ie(n, t, e);
+		n && Fe(n, t, e);
 	}
 	cancelGesture() {
 		this.gesture = null, this.clearHoldTimer();
@@ -659,7 +659,7 @@ var Re = class {
 	clearPendingTap() {
 		this.pendingTapTimer !== void 0 && (clearTimeout(this.pendingTapTimer), this.pendingTapTimer = void 0);
 	}
-}, I = "simpler-camera-card", ze = `custom:${I}`, Be = [
+}, L = "simpler-camera-card", R = `custom:${L}`, z = [
 	"more-info",
 	"toggle",
 	"navigate",
@@ -667,32 +667,29 @@ var Re = class {
 	"perform-action",
 	"assist",
 	"none"
-], L = ["mse", "webrtc"], R = [
+], B = [
 	"none",
 	"name",
 	"custom"
-], z = {
-	transport: "mse",
+], V = {
 	overlay: "none",
 	aspectRatio: "16 / 9",
 	tapAction: { action: "more-info" },
 	holdAction: { action: "none" },
 	doubleTapAction: { action: "none" },
 	reloadAfterMinutesDown: 0
-}, Ve = 3, He = 2e3, Ue = 5e3, We = 2, Ge = 6e5, Ke = .5, qe = 1, Je = 1e4, Ye = 5e3, Xe = 5e3, Ze = 1e4, Qe = {
-	mse: "MSE (recommended)",
-	webrtc: "WebRTC (low latency, needs LAN access)",
+}, Re = 3, ze = 2e3, Be = 5e3, Ve = 2, He = 6e5, Ue = .5, We = 1, Ge = 1e4, Ke = 5e3, qe = 5e3, Je = 1e4, Ye = {
 	none: "None",
 	name: "Entity name",
 	custom: "Custom text"
 };
-function $e(e) {
+function Xe(e) {
 	return e.map((e) => ({
 		value: e,
-		label: Qe[e] ?? e.replace(/_/g, " ")
+		label: Ye[e] ?? e.replace(/_/g, " ")
 	}));
 }
-var et = $e(L), tt = $e(R), nt = [
+var Ze = [
 	{
 		name: "camera",
 		required: !0,
@@ -702,17 +699,10 @@ var et = $e(L), tt = $e(R), nt = [
 		} } }
 	},
 	{
-		name: "transport",
-		selector: { select: {
-			mode: "dropdown",
-			options: et
-		} }
-	},
-	{
 		name: "overlay",
 		selector: { select: {
 			mode: "dropdown",
-			options: tt
+			options: Xe(B)
 		} }
 	},
 	{
@@ -760,10 +750,9 @@ var et = $e(L), tt = $e(R), nt = [
 			} }
 		}]
 	}
-], rt = {
+], Qe = {
 	camera: "Camera",
 	stream: "go2rtc stream name",
-	transport: "Transport",
 	overlay: "Overlay",
 	overlay_text: "Overlay text",
 	tap_action: "Tap action",
@@ -773,10 +762,9 @@ var et = $e(L), tt = $e(R), nt = [
 	reload_after_minutes_down: "Reload after minutes down",
 	interactions: "Interactions",
 	advanced: "Advanced"
-}, it = {
+}, $e = {
 	camera: "The Frigate integration camera entity. It also supplies the snapshot shown while the stream is down, and is the default target for more-info and toggle actions.",
 	stream: "Defaults to the entity’s camera_name. Set it to play a sub-stream instead, e.g. front_yard_sub.",
-	transport: "MSE streams through Home Assistant’s own origin and is the reliable default. WebRTC is lower latency but needs the browser to reach Frigate on port 8555 directly.",
 	overlay: "Label drawn across the bottom of the video.",
 	overlay_text: "Only applies when Overlay is set to Custom text, where it is required.",
 	aspect_ratio: "Examples: 16:9, 4:3, or a bare number such as 1.78. The video is letterboxed.",
@@ -787,45 +775,45 @@ var et = $e(L), tt = $e(R), nt = [
 	interactions: "What tapping, holding and double-tapping the card do.",
 	advanced: "Sub-stream selection and the last-resort page reload."
 };
-function at(e) {
+function et(e) {
 	return {
-		schema: nt,
-		computeLabel: (e) => rt[e.name] ?? e.name,
-		computeHelper: (e) => it[e.name],
+		schema: Ze,
+		computeLabel: (e) => Qe[e.name] ?? e.name,
+		computeHelper: (e) => $e[e.name],
 		assertConfig: (t) => {
 			e(t);
 		}
 	};
 }
-var B = class extends Error {
+var H = class extends Error {
 	constructor(e, t, n) {
 		super(t), this.name = "EndpointError", this.code = e, this.cause = n?.cause;
 	}
-}, ot = /* @__PURE__ */ new Map();
-function st(e) {
+}, tt = /* @__PURE__ */ new Map();
+function U(e) {
 	return typeof e == "string" && e !== "" ? e : void 0;
 }
-function ct(e, t) {
+function nt(e, t) {
 	let n = e.states?.[t];
-	if (!n) throw new B("entity-not-found", `Camera entity "${t}" was not found in Home Assistant. Check the entity id, and that the Frigate integration is loaded.`);
+	if (!n) throw new H("entity-not-found", `Camera entity "${t}" was not found in Home Assistant. Check the entity id, and that the Frigate integration is loaded.`);
 	return n;
 }
-function lt(e, t) {
-	let n = ct(e, t.camera), r = ot.get(t.camera), i = st(n.attributes?.client_id), a = st(n.attributes?.camera_name);
-	i !== void 0 && ot.set(t.camera, {
+function rt(e, t) {
+	let n = nt(e, t.camera), r = tt.get(t.camera), i = U(n.attributes?.client_id), a = U(n.attributes?.camera_name);
+	i !== void 0 && tt.set(t.camera, {
 		clientId: i,
 		cameraName: a
 	});
 	let o = i ?? r?.clientId;
-	if (o === void 0) throw n.state === "unavailable" ? new B("missing-client-id", `Camera entity "${t.camera}" is currently unavailable in Home Assistant.`) : new B("missing-client-id", `Camera entity "${t.camera}" has no "client_id" attribute, so it is not a Frigate camera provided by frigate-hass-integration >= 5.12.0.`);
-	let s = st(t.stream) ?? a ?? r?.cameraName;
-	if (s === void 0) throw new B("missing-stream-name", `Camera entity "${t.camera}" has no "camera_name" attribute. Set "stream:" in the card config to name the go2rtc stream explicitly.`);
+	if (o === void 0) throw n.state === "unavailable" ? new H("missing-client-id", `Camera entity "${t.camera}" is currently unavailable in Home Assistant.`) : new H("missing-client-id", `Camera entity "${t.camera}" has no "client_id" attribute, so it is not a Frigate camera provided by frigate-hass-integration >= 5.12.0.`);
+	let s = U(t.stream) ?? a ?? r?.cameraName;
+	if (s === void 0) throw new H("missing-stream-name", `Camera entity "${t.camera}" has no "camera_name" attribute. Set "stream:" in the card config to name the go2rtc stream explicitly.`);
 	return `/api/frigate/${encodeURIComponent(o)}/go2rtc/ws/api/ws?src=${encodeURIComponent(s)}`;
 }
-function ut(e) {
+function it(e) {
 	return `/api/camera_proxy/${encodeURIComponent(e)}`;
 }
-async function dt(e, t, n = 300) {
+async function at(e, t, n = 300) {
 	let r;
 	try {
 		r = await e.callWS({
@@ -834,34 +822,34 @@ async function dt(e, t, n = 300) {
 			expires: n
 		});
 	} catch (e) {
-		throw new B("sign-failed", `Home Assistant refused to sign "${t}": ${_t(e)}`, { cause: e });
+		throw new H("sign-failed", `Home Assistant refused to sign "${t}": ${dt(e)}`, { cause: e });
 	}
-	if (!r || typeof r.path != "string" || r.path === "") throw new B("sign-failed", `Home Assistant returned no signed path for "${t}".`);
+	if (!r || typeof r.path != "string" || r.path === "") throw new H("sign-failed", `Home Assistant returned no signed path for "${t}".`);
 	return r.path;
 }
-function ft(e, t = location) {
+function ot(e, t = location) {
 	let n = new URL(e, t.href);
 	return n.protocol = n.protocol === "https:" ? "wss:" : "ws:", n.toString();
 }
-function pt(e, t = location) {
+function st(e, t = location) {
 	return new URL(e, t.href).toString();
 }
-async function mt(e, t) {
-	return ft(await dt(e, lt(e, t)));
+async function ct(e, t) {
+	return ot(await at(e, rt(e, t)));
 }
-async function ht(e, t) {
-	return e.states?.[t.camera] ? pt(await dt(e, ut(t.camera))) : null;
+async function lt(e, t) {
+	return e.states?.[t.camera] ? st(await at(e, it(t.camera))) : null;
 }
-var gt = {
-	resolveSignedWsUrl: mt,
-	resolvePosterUrl: ht
+var ut = {
+	resolveSignedWsUrl: ct,
+	resolvePosterUrl: lt
 };
-function _t(e) {
+function dt(e) {
 	return e instanceof Error ? e.message : typeof e == "string" ? e : e && typeof e == "object" && "message" in e ? String(e.message) : String(e);
 }
 //#endregion
 //#region src/player/go2rtc-client.ts
-var V = "[simpler-camera-card]", vt = class {
+var W = "[simpler-camera-card]", ft = class {
 	constructor(e, t = {}) {
 		this.subscriptions = /* @__PURE__ */ new Map(), this.outbound = [], this.socket = null, this.opened = !1, this.finished = !1, this.onOpen = () => {}, this.onBinary = () => {}, this.onClose = () => {}, this.onError = () => {}, this.url = e, this.webSocketImpl = t.webSocketImpl ?? globalThis.WebSocket ?? void 0;
 	}
@@ -877,7 +865,7 @@ var V = "[simpler-camera-card]", vt = class {
 		try {
 			e = new this.webSocketImpl(this.url);
 		} catch (e) {
-			console.info(`${V} go2rtc websocket could not be created:`, e), this.finished = !0, this.onError();
+			console.info(`${W} go2rtc websocket could not be created:`, e), this.finished = !0, this.onError();
 			return;
 		}
 		e.binaryType = "arraybuffer", e.onopen = () => this.handleOpen(), e.onmessage = (e) => this.handleMessage(e), e.onclose = (e) => this.handleClose(e), e.onerror = () => this.handleError(), this.socket = e;
@@ -904,7 +892,7 @@ var V = "[simpler-camera-card]", vt = class {
 			try {
 				e.close();
 			} catch (e) {
-				console.info(`${V} go2rtc websocket close() threw:`, e);
+				console.info(`${W} go2rtc websocket close() threw:`, e);
 			}
 		}
 	}
@@ -919,7 +907,7 @@ var V = "[simpler-camera-card]", vt = class {
 		try {
 			this.socket?.send(e);
 		} catch (e) {
-			console.info(`${V} go2rtc websocket send() failed:`, e);
+			console.info(`${W} go2rtc websocket send() failed:`, e);
 		}
 	}
 	handleMessage(e) {
@@ -938,28 +926,28 @@ var V = "[simpler-camera-card]", vt = class {
 			this.onBinary(e.buffer.slice(e.byteOffset, e.byteOffset + e.byteLength));
 			return;
 		}
-		console.info(`${V} ignoring go2rtc frame of unsupported type`);
+		console.info(`${W} ignoring go2rtc frame of unsupported type`);
 	}
 	dispatchJson(e) {
 		let t;
 		try {
 			t = JSON.parse(e);
 		} catch {
-			console.info(`${V} ignoring non-JSON go2rtc text frame`);
+			console.info(`${W} ignoring non-JSON go2rtc text frame`);
 			return;
 		}
 		if (typeof t != "object" || !t) {
-			console.info(`${V} ignoring go2rtc message that is not an object`);
+			console.info(`${W} ignoring go2rtc message that is not an object`);
 			return;
 		}
 		let n = t;
 		if (typeof n.type != "string") {
-			console.info(`${V} ignoring go2rtc message with no "type"`);
+			console.info(`${W} ignoring go2rtc message with no "type"`);
 			return;
 		}
 		let r = this.subscriptions.get(n.type);
 		if (!r || r.size === 0) {
-			console.info(`${V} unhandled go2rtc message type "${n.type}"`);
+			console.info(`${W} unhandled go2rtc message type "${n.type}"`);
 			return;
 		}
 		for (let e of [...r]) {
@@ -975,7 +963,7 @@ var V = "[simpler-camera-card]", vt = class {
 	handleError() {
 		this.finished || (this.finished = !0, this.opened = !1, this.subscriptions.clear(), this.outbound.length = 0, this.releaseSocket(), this.onError());
 	}
-}, H = "[simpler-camera-card]", yt = [
+}, G = "[simpler-camera-card]", pt = [
 	"avc1.640029",
 	"avc1.64002A",
 	"avc1.640033",
@@ -984,7 +972,7 @@ var V = "[simpler-camera-card]", vt = class {
 	"mp4a.40.5",
 	"flac",
 	"opus"
-], bt = .5, xt = class {
+], mt = .5, ht = class {
 	constructor(e = {}) {
 		this.onPlaying = () => {}, this.onDead = () => {}, this.state = "idle", this.video = null, this.client = null, this.mediaSource = null, this.sourceBuffer = null, this.objectUrl = null, this.handshakeTimer = null, this.codecs = "", this.staged = [], this.stagedBytes = 0, this.playing = !1, this.lastTime = null, this.handleVideoError = () => {
 			let e = this.video?.error;
@@ -993,22 +981,22 @@ var V = "[simpler-camera-card]", vt = class {
 	}
 	mount(e, t) {
 		if (this.state !== "idle") {
-			console.info(`${H} MSE player mount() ignored: player is ${this.state}`);
+			console.info(`${G} MSE player mount() ignored: player is ${this.state}`);
 			return;
 		}
-		this.state = "live", this.video = e, e.addEventListener("error", this.handleVideoError), e.addEventListener("timeupdate", this.handleTimeUpdate), this.handshakeTimer = setTimeout(() => this.die("handshake-timeout"), Ye);
+		this.state = "live", this.video = e, e.addEventListener("error", this.handleVideoError), e.addEventListener("timeupdate", this.handleTimeUpdate), this.handshakeTimer = setTimeout(() => this.die("handshake-timeout"), Ke);
 		let n = this.options.mediaSourceImpl ?? globalThis.MediaSource;
 		if (!n) {
 			this.die("media-error", "MediaSource is unavailable in this browser");
 			return;
 		}
-		let r = St(n);
+		let r = gt(n);
 		if (r === "") {
 			this.die("media-error", "no MSE codec offered by this browser is usable");
 			return;
 		}
 		if (this.codecs = r, !this.attachMediaSource(n, e)) return;
-		let i = new vt(t, { webSocketImpl: this.options.webSocketImpl });
+		let i = new ft(t, { webSocketImpl: this.options.webSocketImpl });
 		this.client = i, i.onBinary = (e) => this.handleSegment(e), i.onClose = (e, t) => this.die("ws-close", `code ${e}${t ? ` (${t})` : ""}`), i.onError = () => this.die("ws-error"), i.on("mse", (e) => this.openSourceBuffer(e)), i.on("error", (e) => this.die("ws-error", `go2rtc: ${String(e.value)}`)), i.connect();
 	}
 	destroy() {
@@ -1019,13 +1007,13 @@ var V = "[simpler-camera-card]", vt = class {
 		try {
 			n = new e();
 		} catch (e) {
-			return this.die("media-error", `MediaSource could not be created: ${U(e)}`), !1;
+			return this.die("media-error", `MediaSource could not be created: ${K(e)}`), !1;
 		}
 		this.mediaSource = n, n.addEventListener("sourceopen", this.handleSourceOpen, { once: !0 });
 		try {
 			this.objectUrl = URL.createObjectURL(n), t.src = this.objectUrl;
 		} catch (e) {
-			return this.die("media-error", `MediaSource could not be attached: ${U(e)}`), !1;
+			return this.die("media-error", `MediaSource could not be attached: ${K(e)}`), !1;
 		}
 		return !0;
 	}
@@ -1051,7 +1039,7 @@ var V = "[simpler-camera-card]", vt = class {
 		try {
 			r = n.addSourceBuffer(t), r.mode = "segments";
 		} catch (e) {
-			this.die("media-error", `addSourceBuffer("${t}") failed: ${U(e)}`);
+			this.die("media-error", `addSourceBuffer("${t}") failed: ${K(e)}`);
 			return;
 		}
 		r.addEventListener("updateend", this.handleUpdateEnd), r.addEventListener("error", this.handleSourceBufferError), this.sourceBuffer = r, this.startPlayback(), this.flushStaged();
@@ -1066,7 +1054,7 @@ var V = "[simpler-camera-card]", vt = class {
 		this.append(t);
 	}
 	stage(e) {
-		this.staged.push(e), this.stagedBytes += e.byteLength, (this.staged.length > 200 || this.stagedBytes > 4194304) && (console.info(`${H} MSE staging queue overflowed (${this.staged.length} segments / ${this.stagedBytes} bytes): the SourceBuffer has stopped draining`), this.die("media-error", "staging queue overflow"));
+		this.staged.push(e), this.stagedBytes += e.byteLength, (this.staged.length > 200 || this.stagedBytes > 4194304) && (console.info(`${G} MSE staging queue overflowed (${this.staged.length} segments / ${this.stagedBytes} bytes): the SourceBuffer has stopped draining`), this.die("media-error", "staging queue overflow"));
 	}
 	flushStaged() {
 		let e = this.sourceBuffer;
@@ -1085,7 +1073,7 @@ var V = "[simpler-camera-card]", vt = class {
 		if (t) try {
 			t.appendBuffer(e);
 		} catch (e) {
-			console.info(`${H} appendBuffer failed:`, e), this.die("media-error", `appendBuffer failed: ${U(e)}`);
+			console.info(`${G} appendBuffer failed:`, e), this.die("media-error", `appendBuffer failed: ${K(e)}`);
 		}
 	}
 	afterUpdate() {
@@ -1106,208 +1094,20 @@ var V = "[simpler-camera-card]", vt = class {
 		if (this.playing) {
 			let e = i - t.currentTime;
 			if (e > 10) {
-				console.info(`${H} ${e.toFixed(1)}s buffered ahead of playback (limit 10s): declaring the stream broken`), this.die("media-error", "buffered too far ahead of playback");
+				console.info(`${G} ${e.toFixed(1)}s buffered ahead of playback (limit 10s): declaring the stream broken`), this.die("media-error", "buffered too far ahead of playback");
 				return;
 			}
 			if (e > 2 && !t.seeking) {
-				let n = i - bt;
-				n > t.currentTime && (console.info(`${H} ${e.toFixed(1)}s behind the live edge: jumping to live`), t.currentTime = n);
+				let n = i - mt;
+				n > t.currentTime && (console.info(`${G} ${e.toFixed(1)}s behind the live edge: jumping to live`), t.currentTime = n);
 			}
 		}
 		let a = t.currentTime - 5;
 		if (a > r && this.mediaSource?.readyState === "open") try {
 			e.remove(r, a);
 		} catch (e) {
-			console.info(`${H} back-buffer trim failed:`, e);
+			console.info(`${G} back-buffer trim failed:`, e);
 		}
-	}
-	startPlayback() {
-		let e = this.video;
-		if (!e) return;
-		let t = e.play();
-		!t || typeof t.catch != "function" || t.catch((t) => {
-			this.state === "live" && (console.info(`${H} play() rejected, retrying muted:`, t), e.muted = !0, e.play()?.catch?.((e) => {
-				this.state === "live" && console.info(`${H} muted play() also rejected:`, e);
-			}));
-		});
-	}
-	checkPlaybackAdvanced() {
-		if (this.state !== "live" || !this.video) return;
-		let e = this.video.currentTime, t = this.lastTime;
-		this.lastTime = e, !(t === null || e <= t) && (this.playing || (this.playing = !0, this.clearHandshakeTimer(), console.info(`${H} MSE playback started`), this.onPlaying()));
-	}
-	die(e, t) {
-		this.state !== "finished" && (this.state = "finished", console.info(`${H} MSE player died: ${e}${t ? ` — ${t}` : ""}`), this.teardown(), this.onDead(e));
-	}
-	teardown() {
-		this.clearHandshakeTimer(), this.staged = [], this.stagedBytes = 0, this.client?.close(), this.client = null;
-		let e = this.sourceBuffer;
-		this.sourceBuffer = null;
-		let t = this.mediaSource;
-		this.mediaSource = null, e && (e.removeEventListener("updateend", this.handleUpdateEnd), e.removeEventListener("error", this.handleSourceBufferError)), t && (t.removeEventListener("sourceopen", this.handleSourceOpen), t.readyState === "open" && (W(() => e?.abort()), W(() => e && t.removeSourceBuffer(e)))), this.objectUrl &&= (W(() => URL.revokeObjectURL(this.objectUrl)), null);
-		let n = this.video;
-		this.video = null, n && (n.removeEventListener("error", this.handleVideoError), n.removeEventListener("timeupdate", this.handleTimeUpdate), W(() => {
-			n.removeAttribute("src"), n.load();
-		}));
-	}
-	clearHandshakeTimer() {
-		this.handshakeTimer !== null && (clearTimeout(this.handshakeTimer), this.handshakeTimer = null);
-	}
-};
-function St(e) {
-	return yt.filter((t) => {
-		try {
-			return e.isTypeSupported(`video/mp4; codecs="${t}"`);
-		} catch {
-			return !1;
-		}
-	}).join(",");
-}
-function U(e) {
-	return e instanceof Error ? `${e.name}: ${e.message}` : String(e);
-}
-function W(e) {
-	try {
-		e();
-	} catch {}
-}
-//#endregion
-//#region src/player/webrtc-player.ts
-var G = "[simpler-camera-card]", Ct = [], wt = class {
-	constructor(e = {}) {
-		this.onPlaying = () => {}, this.onDead = () => {}, this.state = "idle", this.video = null, this.client = null, this.pc = null, this.handshakeTimer = null, this.answerSeen = !1, this.remoteDescriptionApplied = !1, this.pendingCandidates = [], this.assembledStream = null, this.playbackRequested = !1, this.playing = !1, this.lastTime = null, this.handleVideoError = () => {
-			let e = this.video?.error;
-			this.die("media-error", e ? `<video> error ${e.code}: ${e.message}` : void 0);
-		}, this.handleTimeUpdate = () => this.checkPlaybackAdvanced(), this.handleTrack = (e) => this.attachTrack(e), this.handleIceCandidate = (e) => this.sendLocalCandidate(e), this.handleConnectionStateChange = () => this.checkConnectionState("connectionState", this.pc?.connectionState), this.handleIceConnectionStateChange = () => this.checkConnectionState("iceConnectionState", this.pc?.iceConnectionState), this.options = e;
-	}
-	mount(e, t) {
-		if (this.state !== "idle") {
-			console.info(`${G} WebRTC player mount() ignored: player is ${this.state}`);
-			return;
-		}
-		this.state = "live", this.video = e, e.addEventListener("error", this.handleVideoError), e.addEventListener("timeupdate", this.handleTimeUpdate), this.handshakeTimer = setTimeout(() => this.die("handshake-timeout"), Ye);
-		let n = this.options.peerConnectionImpl ?? globalThis.RTCPeerConnection;
-		if (!n) {
-			this.die("media-error", "WebRTC is unavailable in this browser");
-			return;
-		}
-		if (!this.createPeerConnection(n)) return;
-		let r = new vt(t, { webSocketImpl: this.options.webSocketImpl });
-		this.client = r, r.onClose = (e, t) => this.die("ws-close", `code ${e}${t ? ` (${t})` : ""}`), r.onError = () => this.die("ws-error"), r.on("webrtc/answer", (e) => void this.applyAnswer(e)), r.on("webrtc/candidate", (e) => this.receiveRemoteCandidate(e)), r.on("error", (e) => this.die("ws-error", `go2rtc: ${String(e.value)}`)), r.connect(), this.sendOffer();
-	}
-	destroy() {
-		this.state = "finished", this.teardown();
-	}
-	createPeerConnection(e) {
-		let t;
-		try {
-			t = new e({ iceServers: [...Ct] });
-		} catch (e) {
-			return this.die("media-error", `RTCPeerConnection could not be created: ${K(e)}`), !1;
-		}
-		this.pc = t, t.addEventListener("track", this.handleTrack), t.addEventListener("icecandidate", this.handleIceCandidate), t.addEventListener("connectionstatechange", this.handleConnectionStateChange), t.addEventListener("iceconnectionstatechange", this.handleIceConnectionStateChange);
-		try {
-			t.addTransceiver("video", { direction: "recvonly" }), t.addTransceiver("audio", { direction: "recvonly" });
-		} catch (e) {
-			return this.die("media-error", `addTransceiver failed: ${K(e)}`), !1;
-		}
-		return !0;
-	}
-	async sendOffer() {
-		let e = this.pc;
-		if (!e || this.state !== "live") return;
-		let t;
-		try {
-			let n = await e.createOffer();
-			if (this.state !== "live" || (await e.setLocalDescription(n), this.state !== "live")) return;
-			t = e.localDescription?.sdp ?? n.sdp ?? "";
-		} catch (e) {
-			this.die("ws-error", `WebRTC offer could not be created: ${K(e)}`);
-			return;
-		}
-		if (t === "") {
-			this.die("ws-error", "WebRTC offer carried no SDP");
-			return;
-		}
-		console.info(`${G} WebRTC offer sent (${t.length} bytes of SDP)`), this.client?.send({
-			type: "webrtc/offer",
-			value: t
-		});
-	}
-	async applyAnswer(e) {
-		if (this.state !== "live") return;
-		let t = this.pc;
-		if (!t) return;
-		if (this.answerSeen) {
-			console.info(`${G} ignoring a duplicate webrtc/answer`);
-			return;
-		}
-		let n = typeof e.value == "string" ? e.value : "";
-		if (n === "") {
-			this.die("ws-error", "go2rtc sent a webrtc/answer with no SDP");
-			return;
-		}
-		this.answerSeen = !0;
-		try {
-			await t.setRemoteDescription({
-				type: "answer",
-				sdp: n
-			});
-		} catch (e) {
-			this.die("ws-error", `webrtc/answer rejected: ${K(e)}`);
-			return;
-		}
-		this.state === "live" && (console.info(`${G} WebRTC answer applied`), this.remoteDescriptionApplied = !0, this.flushPendingCandidates());
-	}
-	receiveRemoteCandidate(e) {
-		if (this.state !== "live") return;
-		let t = typeof e.value == "string" ? e.value : "";
-		if (t !== "") {
-			if (!this.remoteDescriptionApplied) {
-				if (this.pendingCandidates.length >= 64) {
-					console.info(`${G} dropping a remote ICE candidate: buffer full`);
-					return;
-				}
-				this.pendingCandidates.push(t);
-				return;
-			}
-			this.addRemoteCandidate(t);
-		}
-	}
-	flushPendingCandidates() {
-		let e = this.pendingCandidates;
-		this.pendingCandidates = [];
-		for (let t of e) this.addRemoteCandidate(t);
-	}
-	async addRemoteCandidate(e) {
-		if (this.state === "live") try {
-			await this.pc?.addIceCandidate({
-				candidate: e,
-				sdpMid: "0"
-			});
-		} catch (e) {
-			console.info(`${G} ignoring an unusable remote ICE candidate:`, e);
-		}
-	}
-	sendLocalCandidate(e) {
-		if (this.state !== "live") return;
-		let t = e.candidate?.candidate;
-		t && this.client?.send({
-			type: "webrtc/candidate",
-			value: t
-		});
-	}
-	attachTrack(e) {
-		if (this.state !== "live") return;
-		let t = this.video;
-		if (!t) return;
-		let n = e.streams?.[0] ?? this.assemble(e.track);
-		n && (t.srcObject !== n && (t.srcObject = n, console.info(`${G} WebRTC media attached (${e.track?.kind ?? "unknown"} track)`)), !this.playbackRequested && (this.playbackRequested = !0, this.startPlayback()));
-	}
-	assemble(e) {
-		if (!e) return null;
-		let t = globalThis.MediaStream;
-		return t ? (this.assembledStream ||= new t(), this.assembledStream.addTrack(e), this.assembledStream) : (console.info(`${G} no MediaStream constructor: cannot attach a track without one`), null);
 	}
 	startPlayback() {
 		let e = this.video;
@@ -1322,39 +1122,35 @@ var G = "[simpler-camera-card]", Ct = [], wt = class {
 	checkPlaybackAdvanced() {
 		if (this.state !== "live" || !this.video) return;
 		let e = this.video.currentTime, t = this.lastTime;
-		this.lastTime = e, !(t === null || e <= t) && (this.playing || (this.playing = !0, this.clearHandshakeTimer(), console.info(`${G} WebRTC playback started`), this.onPlaying()));
-	}
-	checkConnectionState(e, t) {
-		if (!(this.state !== "live" || !t)) {
-			if (t === "failed") {
-				this.die("ws-error", `${e} failed`);
-				return;
-			}
-			if (t === "disconnected") {
-				console.info(`${G} WebRTC ${e} disconnected — not fatal; the watchdog convicts if frames stop`);
-				return;
-			}
-			console.info(`${G} WebRTC ${e}: ${t}`);
-		}
+		this.lastTime = e, !(t === null || e <= t) && (this.playing || (this.playing = !0, this.clearHandshakeTimer(), console.info(`${G} MSE playback started`), this.onPlaying()));
 	}
 	die(e, t) {
-		this.state !== "finished" && (this.state = "finished", console.info(`${G} WebRTC player died: ${e}${t ? ` — ${t}` : ""}`), this.teardown(), this.onDead(e));
+		this.state !== "finished" && (this.state = "finished", console.info(`${G} MSE player died: ${e}${t ? ` — ${t}` : ""}`), this.teardown(), this.onDead(e));
 	}
 	teardown() {
-		this.clearHandshakeTimer(), this.pendingCandidates = [], this.client?.close(), this.client = null;
-		let e = this.pc;
-		this.pc = null, e && (e.removeEventListener("track", this.handleTrack), e.removeEventListener("icecandidate", this.handleIceCandidate), e.removeEventListener("connectionstatechange", this.handleConnectionStateChange), e.removeEventListener("iceconnectionstatechange", this.handleIceConnectionStateChange), q(() => {
-			for (let t of e.getTransceivers?.() ?? []) q(() => t.stop?.());
-		}), q(() => e.close())), this.assembledStream = null;
-		let t = this.video;
-		this.video = null, t && (t.removeEventListener("error", this.handleVideoError), t.removeEventListener("timeupdate", this.handleTimeUpdate), q(() => {
-			t.srcObject = null, t.removeAttribute("src"), t.load();
+		this.clearHandshakeTimer(), this.staged = [], this.stagedBytes = 0, this.client?.close(), this.client = null;
+		let e = this.sourceBuffer;
+		this.sourceBuffer = null;
+		let t = this.mediaSource;
+		this.mediaSource = null, e && (e.removeEventListener("updateend", this.handleUpdateEnd), e.removeEventListener("error", this.handleSourceBufferError)), t && (t.removeEventListener("sourceopen", this.handleSourceOpen), t.readyState === "open" && (q(() => e?.abort()), q(() => e && t.removeSourceBuffer(e)))), this.objectUrl &&= (q(() => URL.revokeObjectURL(this.objectUrl)), null);
+		let n = this.video;
+		this.video = null, n && (n.removeEventListener("error", this.handleVideoError), n.removeEventListener("timeupdate", this.handleTimeUpdate), q(() => {
+			n.removeAttribute("src"), n.load();
 		}));
 	}
 	clearHandshakeTimer() {
 		this.handshakeTimer !== null && (clearTimeout(this.handshakeTimer), this.handshakeTimer = null);
 	}
 };
+function gt(e) {
+	return pt.filter((t) => {
+		try {
+			return e.isTypeSupported(`video/mp4; codecs="${t}"`);
+		} catch {
+			return !1;
+		}
+	}).join(",");
+}
 function K(e) {
 	return e instanceof Error ? `${e.name}: ${e.message}` : String(e);
 }
@@ -1365,12 +1161,12 @@ function q(e) {
 }
 //#endregion
 //#region src/reliability/retry.ts
-var Tt = {
+var J = {
 	setTimeout: (e, t) => globalThis.setTimeout(e, t),
 	clearTimeout: (e) => globalThis.clearTimeout(e),
 	setInterval: (e, t) => globalThis.setInterval(e, t),
 	clearInterval: (e) => globalThis.clearInterval(e)
-}, Et = class {
+}, _t = class {
 	constructor(e = {}) {
 		this.failures = 0, this.baseMs = e.baseMs ?? 5e3, this.factor = e.factor ?? 2, this.capMs = e.capMs ?? 6e5, this.jitterMin = e.jitterMin ?? .5, this.jitterMax = e.jitterMax ?? 1, this.random = e.random ?? Math.random;
 	}
@@ -1389,8 +1185,8 @@ var Tt = {
 	reset() {
 		this.failures = 0;
 	}
-}, Dt = class {
-	constructor(e = Tt) {
+}, vt = class {
+	constructor(e = J) {
 		this.handle = null, this.callback = null, this.timers = e;
 	}
 	get pending() {
@@ -1413,7 +1209,7 @@ var Tt = {
 		this.cancel(), e?.();
 	}
 };
-function Ot(e) {
+function yt(e) {
 	let t = e, n = t.requestVideoFrameCallback, r = t.cancelVideoFrameCallback;
 	return typeof n == "function" ? {
 		request: (t) => n.call(e, t),
@@ -1422,9 +1218,9 @@ function Ot(e) {
 		}
 	} : null;
 }
-var kt = class {
+var bt = class {
 	constructor(e) {
-		this.video = null, this.armedFlag = !1, this.stalledFlag = !1, this.destroyed = !1, this.stallHandle = null, this.pollHandle = null, this.frames = null, this.frameHandle = null, this.lastCurrentTime = 0, this.onProgressEvent = () => this.checkProgress(), this.onStall = e.onStall, this.isPlaybackExpected = e.isPlaybackExpected ?? (() => !0), this.timeoutMs = e.timeoutMs ?? 1e4, this.pollIntervalMs = e.pollIntervalMs ?? 1e3, this.timers = e.timers ?? Tt;
+		this.video = null, this.armedFlag = !1, this.stalledFlag = !1, this.destroyed = !1, this.stallHandle = null, this.pollHandle = null, this.frames = null, this.frameHandle = null, this.lastCurrentTime = 0, this.onProgressEvent = () => this.checkProgress(), this.onStall = e.onStall, this.isPlaybackExpected = e.isPlaybackExpected ?? (() => !0), this.timeoutMs = e.timeoutMs ?? 1e4, this.pollIntervalMs = e.pollIntervalMs ?? 1e3, this.timers = e.timers ?? J;
 	}
 	get armed() {
 		return this.armedFlag;
@@ -1458,7 +1254,7 @@ var kt = class {
 	startObserving() {
 		let e = this.video;
 		if (!(!e || !this.armedFlag || this.destroyed)) {
-			if (this.lastCurrentTime = e.currentTime, this.armStallTimer(), this.frames = Ot(e), this.frames) {
+			if (this.lastCurrentTime = e.currentTime, this.armStallTimer(), this.frames = yt(e), this.frames) {
 				this.requestFrame();
 				return;
 			}
@@ -1497,11 +1293,11 @@ var kt = class {
 		let e = this.video;
 		return !e || !this.isPlaybackExpected() ? !1 : !e.paused && !e.seeking && !e.ended;
 	}
-}, J = "[simpler-camera-card]", At = class {
+}, Y = "[simpler-camera-card]", xt = class {
 	constructor(e) {
 		this.onStateChange = () => {}, this.currentState = "idle", this.started = !1, this.suspended = !1, this.player = null, this.generation = 0, this.tier1Attempts = 0, this.remountAttempts = 0, this.pending = {}, this.downSince = null, this.deps = e, this.log = e.logger ?? console, this.now = e.now ?? (() => Date.now()), this.reloadPage = e.reloadPage ?? (() => location.reload());
-		let t = e.timers ?? Tt;
-		this.retryTimer = new Dt(t), this.hiddenTimer = new Dt(t), this.escapeTimer = new Dt(t), this.backoff = new Et({
+		let t = e.timers ?? J;
+		this.retryTimer = new vt(t), this.hiddenTimer = new vt(t), this.escapeTimer = new vt(t), this.backoff = new _t({
 			random: e.random,
 			...e.backoff
 		});
@@ -1510,7 +1306,7 @@ var kt = class {
 			isPlaybackExpected: () => this.started && !this.suspended && this.currentState === "playing",
 			timers: t
 		};
-		this.watchdog = e.createWatchdog ? e.createWatchdog(n) : new kt(n);
+		this.watchdog = e.createWatchdog ? e.createWatchdog(n) : new bt(n);
 	}
 	get state() {
 		return this.currentState;
@@ -1554,28 +1350,28 @@ var kt = class {
 		this.watchdog.attach(n);
 		let r = this.deps.getConfig();
 		this.deps.endpoint.resolveSignedWsUrl(t, r).then((t) => {
-			this.isCurrent(e) && this.mountPlayer(r, n, t, e);
+			this.isCurrent(e) && this.mountPlayer(n, t, e);
 		}, (t) => {
-			this.isCurrent(e) && this.handleDeath("ws-error", Y(t));
+			this.isCurrent(e) && this.handleDeath("ws-error", X(t));
 		});
 	}
-	mountPlayer(e, t, n, r) {
-		let i;
+	mountPlayer(e, t, n) {
+		let r;
 		try {
-			i = this.deps.createPlayer(e.transport);
+			r = this.deps.createPlayer();
 		} catch (e) {
-			this.handleDeath("media-error", Y(e));
+			this.handleDeath("media-error", X(e));
 			return;
 		}
-		this.player = i, i.onPlaying = () => {
-			this.isCurrent(r) && this.handlePlaying();
-		}, i.onDead = (e) => {
-			this.isCurrent(r) && this.handleDeath(e);
+		this.player = r, r.onPlaying = () => {
+			this.isCurrent(n) && this.handlePlaying();
+		}, r.onDead = (e) => {
+			this.isCurrent(n) && this.handleDeath(e);
 		};
 		try {
-			i.mount(t, n);
+			r.mount(e, t);
 		} catch (e) {
-			this.handleDeath("media-error", Y(e));
+			this.handleDeath("media-error", X(e));
 		}
 	}
 	handlePlaying() {
@@ -1585,7 +1381,7 @@ var kt = class {
 		if (!this.started || this.suspended) return;
 		this.teardownPlayer(), this.watchdog.disarm(), this.watchdog.reset(), this.markDown();
 		let n = this.downForMs(), r, i, a;
-		this.tier1Attempts < 3 ? (this.tier1Attempts += 1, r = "retrying", i = this.tier1Attempts, a = He) : (this.remountAttempts += 1, r = "remounting", i = this.remountAttempts, a = this.backoff.next()), this.log.info(`${J} stream died: ${e}, ${r === "retrying" ? "tier-1 retry" : "tier-2 remount"} ${i} in ${a} ms (down for ${Math.round(n / 1e3)} s)` + (t ? `: ${t}` : "")), this.pending = {
+		this.tier1Attempts < 3 ? (this.tier1Attempts += 1, r = "retrying", i = this.tier1Attempts, a = ze) : (this.remountAttempts += 1, r = "remounting", i = this.remountAttempts, a = this.backoff.next()), this.log.info(`${Y} stream died: ${e}, ${r === "retrying" ? "tier-1 retry" : "tier-2 remount"} ${i} in ${a} ms (down for ${Math.round(n / 1e3)} s)` + (t ? `: ${t}` : "")), this.pending = {
 			reason: e,
 			attempt: i,
 			message: t
@@ -1608,7 +1404,7 @@ var kt = class {
 			try {
 				e.destroy();
 			} catch (e) {
-				this.log.info(`${J} player teardown threw: ${Y(e)}`);
+				this.log.info(`${Y} player teardown threw: ${X(e)}`);
 			}
 		}
 	}
@@ -1618,23 +1414,23 @@ var kt = class {
 	handleConnectivityEvent(e) {
 		if (!(!this.started || this.suspended)) {
 			if (this.currentState === "playing") {
-				this.log.info(`${J} ${e} while playing; letting the watchdog verify frames`);
+				this.log.info(`${Y} ${e} while playing; letting the watchdog verify frames`);
 				return;
 			}
-			this.backoff.reset(), this.retryTimer.pending && (this.log.info(`${J} ${e}: retrying immediately`), this.pending = {
+			this.backoff.reset(), this.retryTimer.pending && (this.log.info(`${Y} ${e}: retrying immediately`), this.pending = {
 				...this.pending,
 				reason: e
 			}, this.retryTimer.advance());
 		}
 	}
 	handleHidden() {
-		!this.started || this.suspended || this.hiddenTimer.pending || this.hiddenTimer.schedule(Xe, () => this.suspend());
+		!this.started || this.suspended || this.hiddenTimer.pending || this.hiddenTimer.schedule(qe, () => this.suspend());
 	}
 	handleVisible() {
 		this.hiddenTimer.cancel(), !(!this.started || !this.suspended) && (this.suspended = !1, this.tier1Attempts = 0, this.remountAttempts = 0, this.backoff.reset(), this.pending = {}, this.markDown(), this.beginAttempt());
 	}
 	suspend() {
-		!this.started || this.suspended || (this.suspended = !0, this.retryTimer.cancel(), this.escapeTimer.cancel(), this.teardownPlayer(), this.watchdog.disarm(), this.watchdog.reset(), this.downSince = null, this.pending = {}, this.log.info(`${J} dashboard hidden; stream torn down until it is visible again`), this.setState("idle", { message: "Paused while the dashboard is hidden." }));
+		!this.started || this.suspended || (this.suspended = !0, this.retryTimer.cancel(), this.escapeTimer.cancel(), this.teardownPlayer(), this.watchdog.disarm(), this.watchdog.reset(), this.downSince = null, this.pending = {}, this.log.info(`${Y} dashboard hidden; stream torn down until it is visible again`), this.setState("idle", { message: "Paused while the dashboard is hidden." }));
 	}
 	markDown() {
 		if (this.downSince !== null) return;
@@ -1643,7 +1439,7 @@ var kt = class {
 		!Number.isFinite(e) || e <= 0 || this.escapeTimer.schedule(e * 6e4, () => this.triggerReload(e));
 	}
 	triggerReload(e) {
-		this.log.info(`${J} stream down for ${e} minute(s); reloading the page (escape hatch)`), this.reloadPage();
+		this.log.info(`${Y} stream down for ${e} minute(s); reloading the page (escape hatch)`), this.reloadPage();
 	}
 	downForMs() {
 		return this.downSince === null ? 0 : Math.max(0, this.now() - this.downSince);
@@ -1652,12 +1448,12 @@ var kt = class {
 		this.currentState = e, this.onStateChange(e, t);
 	}
 };
-function Y(e) {
+function X(e) {
 	return e instanceof Error ? e.message : typeof e == "string" ? e : e && typeof e == "object" && "message" in e ? String(e.message) : String(e);
 }
 //#endregion
 //#region \0@oxc-project+runtime@0.144.0/helpers/esm/decorate.js
-function X(e, t, n, r) {
+function Z(e, t, n, r) {
 	var i = arguments.length, a = i < 3 ? t : r === null ? r = Object.getOwnPropertyDescriptor(t, n) : r, o;
 	if (typeof Reflect == "object" && typeof Reflect.decorate == "function") a = Reflect.decorate(e, t, n, r);
 	else for (var s = e.length - 1; s >= 0; s--) (o = e[s]) && (a = (i < 3 ? o(a) : i > 3 ? o(t, n, a) : o(t, n)) || a);
@@ -1665,32 +1461,32 @@ function X(e, t, n, r) {
 }
 //#endregion
 //#region src/card.ts
-var jt = "[simpler-camera-card]", Z = class extends Error {
+var St = "[simpler-camera-card]", Q = class extends Error {
 	constructor(e) {
 		super(e), this.name = "ConfigError";
 	}
-}, Mt = /^[a-z_]+\.[a-z0-9_]+$/, Nt = /^\s*(\d+(?:\.\d+)?)\s*[:/]\s*(\d+(?:\.\d+)?)\s*$/;
-function Pt(e) {
+}, Ct = /^[a-z_]+\.[a-z0-9_]+$/, wt = /^\s*(\d+(?:\.\d+)?)\s*[:/]\s*(\d+(?:\.\d+)?)\s*$/;
+function Tt(e) {
 	return typeof e == "object" && !!e && !Array.isArray(e);
 }
-function Ft(e) {
+function Et(e) {
 	return e.map((e) => `"${e}"`).join(", ");
 }
-function It(e, t, n) {
+function Dt(e, t, n) {
 	if (e === void 0) return n;
-	if (!Pt(e)) throw new Z(`"${t}" must be an action object, e.g. { action: more-info }.`);
+	if (!Tt(e)) throw new Q(`"${t}" must be an action object, e.g. { action: more-info }.`);
 	let r = e.action;
-	if (typeof r != "string" || !Be.includes(r)) throw new Z(`"${t}.action" must be one of ${Ft(Be)} (got ${JSON.stringify(r)}).`);
+	if (typeof r != "string" || !z.includes(r)) throw new Q(`"${t}.action" must be one of ${Et(z)} (got ${JSON.stringify(r)}).`);
 	return e;
 }
-function Lt(e) {
-	if (e === void 0) return z.aspectRatio;
+function Ot(e) {
+	if (e === void 0) return V.aspectRatio;
 	if (typeof e == "number") {
-		if (!Number.isFinite(e) || e <= 0) throw new Z(`"aspect_ratio" must be a positive number (got ${e}).`);
+		if (!Number.isFinite(e) || e <= 0) throw new Q(`"aspect_ratio" must be a positive number (got ${e}).`);
 		return String(e);
 	}
 	if (typeof e == "string") {
-		let t = Nt.exec(e);
+		let t = wt.exec(e);
 		if (t) {
 			let [, e, n] = t;
 			if (Number(e) > 0 && Number(n) > 0) return `${e} / ${n}`;
@@ -1699,37 +1495,34 @@ function Lt(e) {
 			if (Number.isFinite(t) && t > 0) return String(t);
 		}
 	}
-	throw new Z(`"aspect_ratio" must look like "16:9" or be a positive number (got ${JSON.stringify(e)}).`);
+	throw new Q(`"aspect_ratio" must look like "16:9" or be a positive number (got ${JSON.stringify(e)}).`);
 }
-function Q(e) {
-	if (!Pt(e)) throw new Z("Invalid configuration: expected a YAML mapping.");
+function kt(e) {
+	if (!Tt(e)) throw new Q("Invalid configuration: expected a YAML mapping.");
 	let t = e.camera;
-	if (t == null || t === "") throw new Z("\"camera\" is required, e.g. camera: camera.front_yard.");
-	if (typeof t != "string" || !Mt.test(t)) throw new Z(`"camera" must be an entity id like "camera.front_yard" (got ${JSON.stringify(t)}).`);
-	if (!t.startsWith("camera.")) throw new Z(`"camera" must be a camera entity (got "${t}").`);
-	if (e.stream !== void 0 && (typeof e.stream != "string" || e.stream.trim() === "")) throw new Z(`"stream" must be a non-empty go2rtc stream name, e.g. front_yard_sub (got ${JSON.stringify(e.stream)}).`);
-	let n = e.transport ?? z.transport;
-	if (typeof n != "string" || !L.includes(n)) throw new Z(`"transport" must be one of ${Ft(L)} (got ${JSON.stringify(e.transport)}).`);
-	let r = e.overlay ?? z.overlay;
-	if (typeof r != "string" || !R.includes(r)) throw new Z(`"overlay" must be one of ${Ft(R)} (got ${JSON.stringify(e.overlay)}).`);
-	if (e.overlay_text !== void 0 && typeof e.overlay_text != "string") throw new Z("\"overlay_text\" must be a string.");
-	if (r === "custom" && (e.overlay_text === void 0 || e.overlay_text === "")) throw new Z("\"overlay: custom\" requires \"overlay_text\" to be set.");
-	let i = e.reload_after_minutes_down ?? z.reloadAfterMinutesDown;
-	if (typeof i != "number" || !Number.isFinite(i) || i < 0) throw new Z(`"reload_after_minutes_down" must be a number of minutes >= 0, or 0 to disable (got ${JSON.stringify(e.reload_after_minutes_down)}).`);
+	if (t == null || t === "") throw new Q("\"camera\" is required, e.g. camera: camera.front_yard.");
+	if (typeof t != "string" || !Ct.test(t)) throw new Q(`"camera" must be an entity id like "camera.front_yard" (got ${JSON.stringify(t)}).`);
+	if (!t.startsWith("camera.")) throw new Q(`"camera" must be a camera entity (got "${t}").`);
+	if (e.stream !== void 0 && (typeof e.stream != "string" || e.stream.trim() === "")) throw new Q(`"stream" must be a non-empty go2rtc stream name, e.g. front_yard_sub (got ${JSON.stringify(e.stream)}).`);
+	let n = e.overlay ?? V.overlay;
+	if (typeof n != "string" || !B.includes(n)) throw new Q(`"overlay" must be one of ${Et(B)} (got ${JSON.stringify(e.overlay)}).`);
+	if (e.overlay_text !== void 0 && typeof e.overlay_text != "string") throw new Q("\"overlay_text\" must be a string.");
+	if (n === "custom" && (e.overlay_text === void 0 || e.overlay_text === "")) throw new Q("\"overlay: custom\" requires \"overlay_text\" to be set.");
+	let r = e.reload_after_minutes_down ?? V.reloadAfterMinutesDown;
+	if (typeof r != "number" || !Number.isFinite(r) || r < 0) throw new Q(`"reload_after_minutes_down" must be a number of minutes >= 0, or 0 to disable (got ${JSON.stringify(e.reload_after_minutes_down)}).`);
 	return {
 		...e,
-		type: typeof e.type == "string" ? e.type : ze,
+		type: typeof e.type == "string" ? e.type : R,
 		camera: t,
-		transport: n,
-		overlay: r,
-		tap_action: It(e.tap_action, "tap_action", z.tapAction),
-		hold_action: It(e.hold_action, "hold_action", z.holdAction),
-		double_tap_action: It(e.double_tap_action, "double_tap_action", z.doubleTapAction),
-		aspect_ratio: Lt(e.aspect_ratio),
-		reload_after_minutes_down: i
+		overlay: n,
+		tap_action: Dt(e.tap_action, "tap_action", V.tapAction),
+		hold_action: Dt(e.hold_action, "hold_action", V.holdAction),
+		double_tap_action: Dt(e.double_tap_action, "double_tap_action", V.doubleTapAction),
+		aspect_ratio: Ot(e.aspect_ratio),
+		reload_after_minutes_down: r
 	};
 }
-function Rt() {
+function At() {
 	let e = document.createElement("video");
 	e.className = "video", e.muted = !0;
 	for (let t of [
@@ -1740,9 +1533,9 @@ function Rt() {
 	]) e.setAttribute(t, "");
 	return e;
 }
-var $ = class extends P {
+var $ = class extends F {
 	constructor(...e) {
-		super(...e), this._streamState = "idle", this._video = Rt(), this._actions = new Re({
+		super(...e), this._streamState = "idle", this._video = At(), this._actions = new Le({
 			getConfig: () => this._config,
 			getEventTarget: () => this
 		}), this._startScheduled = !1, this._onVisibilityChange = () => {
@@ -1752,7 +1545,7 @@ var $ = class extends P {
 		};
 	}
 	get _endpoint() {
-		return this.supervisorOverrides?.endpoint ?? gt;
+		return this.supervisorOverrides?.endpoint ?? ut;
 	}
 	set hass(e) {
 		let t = this._hass;
@@ -1762,7 +1555,7 @@ var $ = class extends P {
 		return this._hass;
 	}
 	setConfig(e) {
-		let t = Q(e), n = this._config;
+		let t = kt(e), n = this._config;
 		this._config = t, n && (this._stopSupervisor(), this._posterUrl = void 0), this._maybeStart();
 	}
 	connectedCallback() {
@@ -1786,9 +1579,9 @@ var $ = class extends P {
 		}));
 	}
 	_startSupervisor(e) {
-		let t = new At({
-			createPlayer: (e) => e === "webrtc" ? new wt() : new xt(),
-			endpoint: gt,
+		let t = new xt({
+			createPlayer: () => new ht(),
+			endpoint: ut,
 			getHass: () => this._hass,
 			getVideo: () => this._video,
 			getConfig: () => this._config ?? e,
@@ -1813,7 +1606,7 @@ var $ = class extends P {
 	_startPosterRefresh() {
 		this._posterTimer === void 0 && (this._posterTimer = setInterval(() => {
 			this._refreshPoster();
-		}, Ze));
+		}, Je));
 	}
 	_stopPosterRefresh() {
 		this._posterTimer !== void 0 && (clearInterval(this._posterTimer), this._posterTimer = void 0);
@@ -1824,7 +1617,7 @@ var $ = class extends P {
 			let n = await this._endpoint.resolvePosterUrl(e, t);
 			n && (this._posterUrl = n);
 		} catch (e) {
-			console.info(`${jt} poster refresh failed:`, e);
+			console.info(`${St} poster refresh failed:`, e);
 		}
 	}
 	getCardSize() {
@@ -1841,17 +1634,17 @@ var $ = class extends P {
 	static getStubConfig(e) {
 		let t = Object.keys(e?.states ?? {});
 		return {
-			type: ze,
+			type: R,
 			camera: t.find((t) => t.startsWith("camera.") && !!e?.states[t]?.attributes?.camera_name) ?? t.find((e) => e.startsWith("camera.")) ?? "camera.front_yard"
 		};
 	}
 	static getConfigForm() {
-		return at(Q);
+		return et(kt);
 	}
 	render() {
 		let e = this._config;
 		if (!e) return O;
-		let t = this._streamState === "playing", n = this._hass?.states?.[e.camera], r = t ? void 0 : this._posterUrl ?? n?.attributes?.entity_picture, i = this._overlayText(e, n?.attributes?.friendly_name), a = t ? void 0 : this._statusText(!!n), o = Le(e), s = n?.attributes?.friendly_name ?? e.camera;
+		let t = this._streamState === "playing", n = this._hass?.states?.[e.camera], r = t ? void 0 : this._posterUrl ?? n?.attributes?.entity_picture, i = this._overlayText(e, n?.attributes?.friendly_name), a = t ? void 0 : this._statusText(!!n), o = Ie(e), s = n?.attributes?.friendly_name ?? e.camera;
 		return E`
       <ha-card>
         <div
@@ -1881,9 +1674,9 @@ var $ = class extends P {
 		let t = this._streamDetail;
 		switch (this._streamState) {
 			case "playing": return;
-			case "connecting": return Bt("Connecting…", t?.message);
+			case "connecting": return Mt("Connecting…", t?.message);
 			case "retrying":
-			case "remounting": return Bt(`Reconnecting${zt(t?.delayMs)}…`, t?.message);
+			case "remounting": return Mt(`Reconnecting${jt(t?.delayMs)}…`, t?.message);
 			default: return t?.message ?? "Not connected";
 		}
 	}
@@ -1984,25 +1777,25 @@ var $ = class extends P {
   `;
 	}
 };
-X([F()], $.prototype, "_config", void 0), X([F()], $.prototype, "_streamState", void 0), X([F()], $.prototype, "_streamDetail", void 0), X([F()], $.prototype, "_posterUrl", void 0);
-function zt(e) {
+Z([I()], $.prototype, "_config", void 0), Z([I()], $.prototype, "_streamState", void 0), Z([I()], $.prototype, "_streamDetail", void 0), Z([I()], $.prototype, "_posterUrl", void 0);
+function jt(e) {
 	return typeof e != "number" || !Number.isFinite(e) || e <= 0 ? "" : e < 1e3 ? " shortly" : ` in ${Math.round(e / 1e3)} s`;
 }
-function Bt(e, t) {
+function Mt(e, t) {
 	return t ? `${e} — ${t}` : e;
 }
-customElements.get("simpler-camera-card") || customElements.define(I, $);
+customElements.get("simpler-camera-card") || customElements.define(L, $);
 //#endregion
 //#region src/index.ts
-var Vt = "0.2.0";
+var Nt = "0.3.0";
 window.customCards = window.customCards ?? [], window.customCards.some((e) => e.type === "simpler-camera-card") || window.customCards.push({
-	type: I,
+	type: L,
 	name: "Simpler Camera Card",
 	description: "Single-camera Frigate live view via go2rtc, built to recover from network blips on long-running dashboards.",
 	preview: !1,
 	documentationURL: "https://git.bishopdynamics.com/claude/simpler-camera-card"
-}), console.info(`%c SIMPLER-CAMERA-CARD %c v${Vt} `, "color: white; background: #039be5; font-weight: 700;", "color: #039be5; background: white; font-weight: 700;");
+}), console.info(`%c SIMPLER-CAMERA-CARD %c v${Nt} `, "color: white; background: #039be5; font-weight: 700;", "color: #039be5; background: white; font-weight: 700;");
 //#endregion
-export { Be as ACTION_NAMES, I as CARD_TAG, ze as CARD_TYPE, Vt as CARD_VERSION, z as CONFIG_DEFAULTS, Ye as HANDSHAKE_TIMEOUT_MS, Xe as HIDDEN_TEARDOWN_GRACE_MS, R as OVERLAY_MODES, Ze as POSTER_REFRESH_INTERVAL_MS, Ue as REMOUNT_BACKOFF_BASE_MS, Ge as REMOUNT_BACKOFF_CAP_MS, We as REMOUNT_BACKOFF_FACTOR, qe as REMOUNT_BACKOFF_JITTER_MAX, Ke as REMOUNT_BACKOFF_JITTER_MIN, $ as SimplerCameraCard, Ve as TIER1_MAX_RETRIES, He as TIER1_RETRY_DELAY_MS, L as TRANSPORTS, Je as WATCHDOG_STALL_TIMEOUT_MS, Q as normalizeConfig };
+export { z as ACTION_NAMES, L as CARD_TAG, R as CARD_TYPE, Nt as CARD_VERSION, V as CONFIG_DEFAULTS, Ke as HANDSHAKE_TIMEOUT_MS, qe as HIDDEN_TEARDOWN_GRACE_MS, B as OVERLAY_MODES, Je as POSTER_REFRESH_INTERVAL_MS, Be as REMOUNT_BACKOFF_BASE_MS, He as REMOUNT_BACKOFF_CAP_MS, Ve as REMOUNT_BACKOFF_FACTOR, We as REMOUNT_BACKOFF_JITTER_MAX, Ue as REMOUNT_BACKOFF_JITTER_MIN, $ as SimplerCameraCard, Re as TIER1_MAX_RETRIES, ze as TIER1_RETRY_DELAY_MS, Ge as WATCHDOG_STALL_TIMEOUT_MS, kt as normalizeConfig };
 
 //# sourceMappingURL=simpler-camera-card.js.map

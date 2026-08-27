@@ -34,7 +34,7 @@
  * drive the guard with a stub.
  */
 
-import { OVERLAY_MODES, TRANSPORTS } from './types';
+import { OVERLAY_MODES } from './types';
 
 /* -------------------------------------------------------------------------- */
 /* Local mirror of HA's form types                                             */
@@ -95,8 +95,6 @@ export function isConfigFormGroup(node: ConfigFormNode): node is ConfigFormGroup
  */
 
 const ENUM_LABELS: Record<string, string> = {
-  mse: 'MSE (recommended)',
-  webrtc: 'WebRTC (low latency, needs LAN access)',
   none: 'None',
   name: 'Entity name',
   custom: 'Custom text',
@@ -109,7 +107,6 @@ function optionsFrom(values: readonly string[]): { value: string; label: string 
   }));
 }
 
-const TRANSPORT_OPTIONS = optionsFrom(TRANSPORTS);
 const OVERLAY_OPTIONS = optionsFrom(OVERLAY_MODES);
 
 /* -------------------------------------------------------------------------- */
@@ -137,7 +134,6 @@ const SCHEMA: readonly ConfigFormNode[] = [
     // already explain a non-Frigate pick.
     selector: { entity: { filter: { integration: 'frigate', domain: 'camera' } } },
   },
-  { name: 'transport', selector: { select: { mode: 'dropdown', options: TRANSPORT_OPTIONS } } },
   { name: 'overlay', selector: { select: { mode: 'dropdown', options: OVERLAY_OPTIONS } } },
   { name: 'overlay_text', selector: { text: {} } },
   { name: 'aspect_ratio', selector: { text: {} } },
@@ -183,7 +179,6 @@ const SCHEMA: readonly ConfigFormNode[] = [
 const LABELS: Record<string, string> = {
   camera: 'Camera',
   stream: 'go2rtc stream name',
-  transport: 'Transport',
   overlay: 'Overlay',
   overlay_text: 'Overlay text',
   tap_action: 'Tap action',
@@ -202,9 +197,6 @@ const HELPERS: Record<string, string> = {
   stream:
     'Defaults to the entity’s camera_name. Set it to play a sub-stream instead, e.g. ' +
     'front_yard_sub.',
-  transport:
-    'MSE streams through Home Assistant’s own origin and is the reliable default. ' +
-    'WebRTC is lower latency but needs the browser to reach Frigate on port 8555 directly.',
   overlay: 'Label drawn across the bottom of the video.',
   overlay_text: 'Only applies when Overlay is set to Custom text, where it is required.',
   aspect_ratio: 'Examples: 16:9, 4:3, or a bare number such as 1.78. The video is letterboxed.',

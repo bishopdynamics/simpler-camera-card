@@ -29,7 +29,6 @@ import { ActionController, isInteractive } from './actions';
 import { buildConfigForm, type ConfigForm } from './editor';
 import { endpointResolver } from './endpoint';
 import { MsePlayer } from './player/mse-player';
-import { WebRtcPlayer } from './player/webrtc-player';
 import { StreamSupervisorImpl, type StreamSupervisorDeps } from './reliability/supervisor';
 import {
   ACTION_NAMES,
@@ -38,7 +37,6 @@ import {
   CONFIG_DEFAULTS,
   OVERLAY_MODES,
   POSTER_REFRESH_INTERVAL_MS,
-  TRANSPORTS,
   type ActionConfig,
   type ActionName,
   type EndpointResolver,
@@ -48,7 +46,6 @@ import {
   type OverlayMode,
   type SupervisorState,
   type SupervisorStateDetail,
-  type Transport,
 } from './types';
 
 const LOG_PREFIX = '[simpler-camera-card]';
@@ -165,13 +162,6 @@ export function normalizeConfig(raw: unknown): NormalizedCardConfig {
     );
   }
 
-  const transport = raw.transport ?? CONFIG_DEFAULTS.transport;
-  if (typeof transport !== 'string' || !TRANSPORTS.includes(transport as Transport)) {
-    throw new ConfigError(
-      `"transport" must be one of ${quoteList(TRANSPORTS)} (got ${JSON.stringify(raw.transport)}).`,
-    );
-  }
-
   const overlay = raw.overlay ?? CONFIG_DEFAULTS.overlay;
   if (typeof overlay !== 'string' || !OVERLAY_MODES.includes(overlay as OverlayMode)) {
     throw new ConfigError(
@@ -198,7 +188,6 @@ export function normalizeConfig(raw: unknown): NormalizedCardConfig {
     ...raw,
     type: typeof raw.type === 'string' ? raw.type : CARD_TYPE,
     camera,
-    transport: transport as Transport,
     overlay: overlay as OverlayMode,
     tap_action: validateAction(raw.tap_action, 'tap_action', CONFIG_DEFAULTS.tapAction),
     hold_action: validateAction(raw.hold_action, 'hold_action', CONFIG_DEFAULTS.holdAction),
@@ -423,8 +412,7 @@ export class SimplerCameraCard extends LitElement {
 
   private _startSupervisor(config: NormalizedCardConfig): void {
     const supervisor = new StreamSupervisorImpl({
-      createPlayer: (transport): LivePlayer =>
-        transport === 'webrtc' ? new WebRtcPlayer() : new MsePlayer(),
+      createPlayer: (): LivePlayer => new MsePlayer(),
       endpoint: endpointResolver,
       getHass: () => this._hass,
       getVideo: () => this._video,

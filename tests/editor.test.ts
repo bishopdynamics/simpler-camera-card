@@ -7,7 +7,7 @@ import {
   type ConfigFormField,
   type ConfigFormNode,
 } from '../src/editor';
-import { CARD_TYPE, OVERLAY_MODES, TRANSPORTS, type SimplerCameraCardConfig } from '../src/types';
+import { CARD_TYPE, OVERLAY_MODES, type SimplerCameraCardConfig } from '../src/types';
 
 const form: ConfigForm = buildConfigForm(normalizeConfig);
 
@@ -34,7 +34,6 @@ const EVERY_OPTION: SimplerCameraCardConfig = {
   type: CARD_TYPE,
   camera: 'camera.front_yard',
   stream: 'front_yard_sub',
-  transport: 'mse',
   overlay: 'custom',
   overlay_text: 'Front Yard',
   tap_action: { action: 'more-info' },
@@ -156,7 +155,7 @@ describe('config form schema', () => {
 
   it('puts the common options at the top level', () => {
     const topLevel = form.schema.filter((node) => !isConfigFormGroup(node)).map((n) => n.name);
-    expect(topLevel).toEqual(['camera', 'transport', 'overlay', 'overlay_text', 'aspect_ratio']);
+    expect(topLevel).toEqual(['camera', 'overlay', 'overlay_text', 'aspect_ratio']);
   });
 
   it('picks the camera with a Frigate-filtered entity selector', () => {
@@ -166,16 +165,13 @@ describe('config form schema', () => {
     });
   });
 
-  it('offers exactly the transports and overlay modes validation accepts', () => {
+  it('offers exactly the overlay modes validation accepts', () => {
     const options = (name: string): { value: string; label: string }[] =>
       (field(name).selector.select as { options: { value: string; label: string }[] }).options;
 
-    expect(options('transport').map((o) => o.value)).toEqual([...TRANSPORTS]);
     expect(options('overlay').map((o) => o.value)).toEqual([...OVERLAY_MODES]);
-    for (const name of ['transport', 'overlay']) {
-      expect((field(name).selector.select as { mode: string }).mode).toBe('dropdown');
-      for (const option of options(name)) expect(option.label).not.toBe('');
-    }
+    expect((field('overlay').selector.select as { mode: string }).mode).toBe('dropdown');
+    for (const option of options('overlay')) expect(option.label).not.toBe('');
   });
 
   it('uses HA’s own action editor for all three gesture slots', () => {
@@ -225,6 +221,14 @@ describe('assertConfig', () => {
     expect(() => form.assertConfig(EVERY_OPTION)).not.toThrow();
   });
 
+  it('keeps the GUI editor for a pre-0.3.0 config that still carries transport:', () => {
+    // WebRTC is gone, but a dashboard written against 0.2.x must not be kicked
+    // out to the YAML editor over a key that is now just another unknown one.
+    expect(() =>
+      form.assertConfig({ type: CARD_TYPE, camera: 'camera.front_yard', transport: 'webrtc' }),
+    ).not.toThrow();
+  });
+
   it('accepts every example config in the README', () => {
     // Guard the guard: if the README parser silently produced junk, every
     // assertion below would pass vacuously. The fullest example is spelled out.
@@ -233,7 +237,6 @@ describe('assertConfig', () => {
       type: CARD_TYPE,
       camera: 'camera.front_yard',
       stream: 'front_yard_sub',
-      transport: 'webrtc',
       overlay: 'custom',
       overlay_text: 'Front Yard',
       hold_action: { action: 'navigate', navigation_path: '/lovelace/cameras' },
@@ -248,9 +251,6 @@ describe('assertConfig', () => {
 
   it('rejects what normalizeConfig rejects, with its message', () => {
     expect(() => form.assertConfig({ type: CARD_TYPE })).toThrow(/"camera" is required/);
-    expect(() =>
-      form.assertConfig({ type: CARD_TYPE, camera: 'camera.a', transport: 'rtsp' }),
-    ).toThrow(/"transport" must be one of/);
     expect(() =>
       form.assertConfig({ type: CARD_TYPE, camera: 'camera.a', overlay: 'custom' }),
     ).toThrow(/requires "overlay_text"/);

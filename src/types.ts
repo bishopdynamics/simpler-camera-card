@@ -152,12 +152,6 @@ export const ACTION_NAMES: readonly ActionName[] = [
 /* Card configuration                                                          */
 /* -------------------------------------------------------------------------- */
 
-/** Streaming transport. MSE is the default; WebRTC is opt-in (slice 7). */
-export type Transport = 'mse' | 'webrtc';
-
-/** Accepted `transport:` values; used by config validation. */
-export const TRANSPORTS: readonly Transport[] = ['mse', 'webrtc'];
-
 /** Overlay label mode. */
 export type OverlayMode = 'none' | 'name' | 'custom';
 
@@ -172,7 +166,6 @@ export const OVERLAY_MODES: readonly OverlayMode[] = ['none', 'name', 'custom'];
  * type: custom:simpler-camera-card
  * camera: camera.front_yard
  * stream: front_yard_sub
- * transport: mse
  * overlay: name
  * overlay_text: "Front Yard"
  * tap_action: { action: more-info }
@@ -191,8 +184,6 @@ export interface SimplerCameraCardConfig {
   camera: string;
   /** go2rtc stream name; defaults to the entity's `camera_name` attribute. */
   stream?: string;
-  /** Default `mse`. */
-  transport?: Transport;
   /** Default `none`. */
   overlay?: OverlayMode;
   /** Label text for `overlay: custom` (required in that mode). */
@@ -228,7 +219,6 @@ export interface SimplerCameraCardConfig {
 export interface NormalizedCardConfig extends SimplerCameraCardConfig {
   type: string;
   camera: string;
-  transport: Transport;
   overlay: OverlayMode;
   tap_action: ActionConfig;
   hold_action: ActionConfig;
@@ -240,7 +230,6 @@ export interface NormalizedCardConfig extends SimplerCameraCardConfig {
 
 /** Defaults applied by `normalizeConfig()`. Exported so tests assert on them. */
 export const CONFIG_DEFAULTS = {
-  transport: 'mse' as Transport,
   overlay: 'none' as OverlayMode,
   aspectRatio: '16 / 9',
   tapAction: { action: 'more-info' } as ActionConfig,
@@ -267,7 +256,7 @@ export const CONFIG_DEFAULTS = {
  * | (c) frame-stall watchdog fired              | `stall`              |
  * | (d) `hass.connected` false -> true edge     | `hass-reconnected`   |
  * | (e) `resume` / `pageshow` / `online`        | `page-resumed`       |
- * | (f) MSE/WebRTC handshake timed out (5 s)    | `handshake-timeout`  |
+ * | (f) MSE handshake timed out (5 s)           | `handshake-timeout`  |
  *
  * Reported by: players (`ws-*`, `media-error`, `handshake-timeout`) and the
  * watchdog (`stall`); synthesised by the supervisor for the external events
@@ -294,8 +283,7 @@ export type DeathReason =
  * makes tier-2 recovery a clean "replace the whole player" operation and keeps
  * every player free of internal retry logic.
  *
- * Implemented by: `player/mse-player.ts` (slice 3),
- * `player/webrtc-player.ts` (slice 7).
+ * Implemented by: `player/mse-player.ts` (slice 3).
  * Consumed by: `reliability/supervisor.ts` (slice 4) — nothing else constructs
  * or drives a player.
  */
@@ -336,14 +324,14 @@ export interface LivePlayer {
 }
 
 /**
- * Constructs a player for a transport.
+ * Constructs a player for one attempt.
  *
- * Exists so the supervisor never imports a concrete player module (keeping the
- * WebRTC lane out of the MSE code path, and letting tests inject fakes).
+ * Exists so the supervisor never imports a concrete player module (which keeps
+ * the supervisor's tests free of MSE plumbing and lets them inject fakes).
  *
  * Implemented by: `card.ts` (slice 5). Consumed by: the supervisor.
  */
-export type PlayerFactory = (transport: Transport) => LivePlayer;
+export type PlayerFactory = () => LivePlayer;
 
 /* -------------------------------------------------------------------------- */
 /* Supervisor contract                                                         */

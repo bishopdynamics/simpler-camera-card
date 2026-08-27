@@ -12,7 +12,6 @@ import type {
   HomeAssistant,
   LivePlayer,
   NormalizedCardConfig,
-  Transport,
 } from '../../src/types';
 import type { StallWatchdog, WatchdogOptions } from '../../src/reliability/watchdog';
 
@@ -25,7 +24,6 @@ export class FakePlayer implements LivePlayer {
   onPlaying: () => void = () => {};
   onDead: (reason: DeathReason) => void = () => {};
 
-  readonly transport: Transport;
   mountedVideo: HTMLVideoElement | null = null;
   mountedUrl: string | null = null;
   mountCount = 0;
@@ -34,10 +32,6 @@ export class FakePlayer implements LivePlayer {
   /** The callbacks as they were at `mount()` time — used to simulate a zombie. */
   private capturedOnPlaying: () => void = () => {};
   private capturedOnDead: (reason: DeathReason) => void = () => {};
-
-  constructor(transport: Transport = 'mse') {
-    this.transport = transport;
-  }
 
   mount(video: HTMLVideoElement, signedWsUrl: string): void {
     this.mountCount += 1;
@@ -266,7 +260,6 @@ export function fakeConfig(overrides: Partial<NormalizedCardConfig> = {}): Norma
   return {
     type: 'custom:simpler-camera-card',
     camera: 'camera.front_yard',
-    transport: 'mse',
     overlay: 'none',
     tap_action: { action: 'more-info' },
     hold_action: { action: 'none' },

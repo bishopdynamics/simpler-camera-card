@@ -93,7 +93,6 @@ A fuller example:
 type: custom:simpler-camera-card
 camera: camera.front_yard
 stream: front_yard_sub            # go2rtc sub-stream
-transport: webrtc                 # lower latency; needs LAN access to Frigate :8555
 overlay: custom
 overlay_text: Front Yard
 hold_action:
@@ -109,7 +108,6 @@ reload_after_minutes_down: 30     # last-resort page reload
 | --- | --- | --- | --- |
 | `camera` | entity id | *(required)* | The Frigate integration's HA camera entity, e.g. `camera.front_yard`. Must be in the `camera.` domain. |
 | `stream` | string | the entity's `camera_name` attribute | go2rtc stream name. This is how you select a sub-stream — see below. |
-| `transport` | `mse` \| `webrtc` | `mse` | Streaming transport. See [WebRTC mode](#webrtc-mode). |
 | `overlay` | `none` \| `name` \| `custom` | `none` | Label drawn across the bottom of the video. `name` uses the entity's friendly name. |
 | `overlay_text` | string | — | Label text. **Required** when `overlay: custom`; ignored otherwise. |
 | `tap_action` | action object | `{ action: more-info }` | Fired as HA's standard `hass-action`, so `more-info` opens Home Assistant's own live camera dialog. |
@@ -125,6 +123,8 @@ anything HA supports works here. `more-info` and `toggle` default to the card's 
 
 Keys the card does not recognise are **ignored, not rejected** — Lovelace injects its own
 (`view_layout`, `grid_options`, `visibility`, …) and rejecting them would break valid dashboards.
+The `transport:` option went the same way in 0.3.0: WebRTC was removed and the card is MSE-only, so a
+leftover `transport:` line in an old config is now simply one more ignored key. Nothing to change.
 
 Two gesture details worth knowing, because they are deliberate:
 
@@ -147,19 +147,6 @@ stream: front_yard_sub         # the go2rtc stream actually played
 
 Use it for the cameras in a grid and save the main stream for the full-screen view. Without `stream:`,
 the card plays the stream named by the entity's `camera_name` attribute (the main stream).
-
-## WebRTC mode
-
-`transport: webrtc` signals over the *same* go2rtc websocket as MSE, but the media then flows directly
-from your browser to Frigate.
-
-- **What it buys:** lower latency than MSE.
-- **What it needs:** the browser must be able to reach Frigate's WebRTC port, **`:8555`** (UDP and TCP),
-  directly. The card offers **no ICE servers** — no STUN, no TURN, none configurable in v1 — because it
-  assumes browser and Frigate share a LAN.
-- **Recommendation:** stay on the default `mse` unless you specifically need the latency. MSE is one
-  websocket through HA's own origin, hardware-decoded, with no NAT to negotiate — it is what Frigate's
-  own UI uses, and it is far easier to debug.
 
 ## How recovery works
 
@@ -193,7 +180,6 @@ console — including *why* each reconnect was triggered. That is the first plac
 | `Entity camera.x not found` | Typo in `camera:`, or the Frigate integration has not loaded yet. |
 | `Home Assistant refused to sign ...` | HA rejected `auth/sign_path`. Usually a transient websocket problem; the card keeps retrying. |
 | Status pill stuck on `Connecting…` / `Reconnecting…` | go2rtc has no such stream, or cannot pull from the camera. Check the stream name against Frigate's go2rtc config, and Frigate's own logs. |
-| `transport: webrtc` never connects but `mse` works | The browser cannot reach Frigate's `:8555`. Fix the network path or go back to `mse`. |
 | Card looks stale after an update | The `?v=` in the dashboard resource URL was not bumped. Compare the version banner in the console against what you installed. |
 | No audio | By design — v1 plays muted video only. |
 
@@ -211,7 +197,7 @@ bundled in — the card has no runtime dependency to resolve on the HA frontend)
 happy-dom.
 
 Layout: `src/card.ts` (config, render, poster), `src/endpoint.ts` (URL construction + per-attempt
-signing), `src/player/` (go2rtc websocket protocol, MSE and WebRTC lanes), `src/reliability/`
+signing), `src/player/` (go2rtc websocket protocol and the MSE lane), `src/reliability/`
 (watchdog, retry, and the supervisor that owns every reconnect decision).
 
 **Releasing.** Two version fields must move together:
