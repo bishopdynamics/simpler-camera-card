@@ -21,3 +21,4 @@ If something here is actually bigger than it looks and really should be spec'd f
 A feature must first be planned (user idea → research and discuss → improved idea → full feature spec), producing a spec file `docs/spec/FEATURE_SPEC_<thing>.md`. Then it can be implemented, following the spec.
 
 - We _need_ visual editor support for this card
+  - ✅ **done (v0.2.0, refined in v0.3.0):** `getConfigForm()` visual editor covering every option; field-verified by James

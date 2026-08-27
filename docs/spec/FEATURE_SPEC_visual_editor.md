@@ -1,6 +1,6 @@
 # SPEC: Visual Editor
 
-- **Status:** in-progress
+- **Status:** done
 
 ## Summary
 
@@ -71,3 +71,4 @@ Give the card a visual (GUI) config editor in the Lovelace dashboard, so every o
 - 2026-08-26 — created (draft, pending James's approval).
 - 2026-08-26 — approved by James; slice 1 dispatched.
 - 2026-08-26 — slice 1 done (Opus worker, orchestrator-verified: 285 tests). Spec correction from field-verified HA source: expandables need `name` + `flatten: true`, not name-less nodes.
+- 2026-08-27 — done: James field-verified the editor in his HA ("editor works well") on v0.2.0 and again on v0.3.0 (transport dropdown since removed by FEATURE_SPEC_remove_webrtc). Slice 2's checks were performed by James directly rather than via browser automation.

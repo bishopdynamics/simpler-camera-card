@@ -1,6 +1,6 @@
 # SPEC: Remove WebRTC Transport
 
-- **Status:** in-progress
+- **Status:** done
 
 ## Summary
 
@@ -50,3 +50,4 @@ Pure excision: delete `src/player/webrtc-player.ts` and its tests; drop `Transpo
 
 - 2026-08-27 — created; approved by James's direct instruction ("remove webrtc support, focus exclusively on MSE"); slice 1 dispatched.
 - 2026-08-27 — slice 1 done (Opus worker, orchestrator-verified: 243 unit + 3 integration tests green). v0.3.0 shipped; awaiting James's field check.
+- 2026-08-27 — done: James installed 0.3.0 and confirmed ("tested, looks good").
