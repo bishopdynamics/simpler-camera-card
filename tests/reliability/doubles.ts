@@ -255,7 +255,11 @@ export function fakeEndpoint(): FakeEndpoint {
   };
 }
 
-/** A normalized config with every default applied. */
+/**
+ * A normalized config shaped like `normalizeConfig()`'s output. `tap_action`
+ * is set explicitly (not the `none` default) so gesture-adjacent code under
+ * test always has something to fire; every other field matches its default.
+ */
 export function fakeConfig(overrides: Partial<NormalizedCardConfig> = {}): NormalizedCardConfig {
   return {
     type: 'custom:simpler-camera-card',

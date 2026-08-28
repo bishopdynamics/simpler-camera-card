@@ -139,6 +139,14 @@ const SCHEMA: readonly ConfigFormNode[] = [
   },
   { name: 'mode', selector: { select: { mode: 'dropdown', options: MODE_OPTIONS } } },
   { name: 'tap_to_live', selector: { boolean: {} } },
+  {
+    name: 'live_duration',
+    // A slider can only ever emit a value in range, unlike the number box it
+    // replaced: typing "10" there emitted `1` after the first keystroke, which
+    // `normalizeConfig` then rejected (min 5) and HA dropped to the YAML
+    // editor. `mode: 'slider'` sidesteps the whole class of bug.
+    selector: { number: { min: 5, max: 60, step: 5, mode: 'slider', unit_of_measurement: 's' } },
+  },
   { name: 'overlay', selector: { select: { mode: 'dropdown', options: OVERLAY_OPTIONS } } },
   { name: 'overlay_text', selector: { text: {} } },
   {
@@ -165,10 +173,6 @@ const SCHEMA: readonly ConfigFormNode[] = [
       {
         name: 'refresh_interval',
         selector: { number: { min: 1, step: 0.5, mode: 'box', unit_of_measurement: 's' } },
-      },
-      {
-        name: 'live_duration',
-        selector: { number: { min: 5, step: 0.5, mode: 'box', unit_of_measurement: 's' } },
       },
       { name: 'aspect_ratio', selector: { text: {} } },
       {
@@ -231,12 +235,13 @@ const HELPERS: Record<string, string> = {
     'more-info while this is on.',
   live_duration:
     'How long the temporary live window stays up after a tap, before automatically reverting ' +
-    'to snapshots. Minimum 5 seconds.',
+    'to snapshots. 5–60 seconds here; YAML also accepts fractional values above the minimum.',
   reload_after_minutes_down:
     'Last resort: reload the whole page after this many consecutive minutes down. ' +
     '0 disables it.',
   interactions: 'What tapping, holding and double-tapping the card do.',
-  advanced: 'Sub-stream selection, timing knobs, aspect ratio and the last-resort page reload.',
+  advanced:
+    'Sub-stream selection, snapshot refresh interval, aspect ratio and the last-resort page reload.',
 };
 
 /* -------------------------------------------------------------------------- */

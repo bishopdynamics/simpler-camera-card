@@ -13,7 +13,11 @@ import {
 } from '../src/actions';
 import { CARD_TYPE, type ActionConfig, type NormalizedCardConfig } from '../src/types';
 
-/** A normalized config, exactly as `normalizeConfig()` would hand it over. */
+/**
+ * A normalized config, shaped as `normalizeConfig()` would hand it over.
+ * `tap_action` is set explicitly (not the `none` default) so gesture tests
+ * always have a tap that does something to observe.
+ */
 function config(overrides: Partial<NormalizedCardConfig> = {}): NormalizedCardConfig {
   return {
     type: CARD_TYPE,

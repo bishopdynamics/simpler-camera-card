@@ -674,7 +674,7 @@ var Be = class {
 ], R = ["live", "snapshot"], z = {
 	overlay: "none",
 	aspectRatio: "16 / 9",
-	tapAction: { action: "more-info" },
+	tapAction: { action: "none" },
 	holdAction: { action: "none" },
 	doubleTapAction: { action: "none" },
 	reloadAfterMinutesDown: 0,
@@ -714,6 +714,16 @@ var nt = tt(L), rt = [
 	{
 		name: "tap_to_live",
 		selector: { boolean: {} }
+	},
+	{
+		name: "live_duration",
+		selector: { number: {
+			min: 5,
+			max: 60,
+			step: 5,
+			mode: "slider",
+			unit_of_measurement: "s"
+		} }
 	},
 	{
 		name: "overlay",
@@ -766,15 +776,6 @@ var nt = tt(L), rt = [
 				} }
 			},
 			{
-				name: "live_duration",
-				selector: { number: {
-					min: 5,
-					step: .5,
-					mode: "box",
-					unit_of_measurement: "s"
-				} }
-			},
-			{
 				name: "aspect_ratio",
 				selector: { text: {} }
 			},
@@ -816,10 +817,10 @@ var nt = tt(L), rt = [
 	mode: "Live stream decodes video continuously. Snapshots poll a still image instead — no WebSocket or video decode, for low-resource kiosks.",
 	refresh_interval: "Only applies in Snapshots mode: how often a new still is fetched. Minimum 1 second.",
 	tap_to_live: "Only applies in Snapshots mode: a tap temporarily switches the card to the real live stream instead of firing Tap action; a second tap reverts early. Use Hold action to reach more-info while this is on.",
-	live_duration: "How long the temporary live window stays up after a tap, before automatically reverting to snapshots. Minimum 5 seconds.",
+	live_duration: "How long the temporary live window stays up after a tap, before automatically reverting to snapshots. 5–60 seconds here; YAML also accepts fractional values above the minimum.",
 	reload_after_minutes_down: "Last resort: reload the whole page after this many consecutive minutes down. 0 disables it.",
 	interactions: "What tapping, holding and double-tapping the card do.",
-	advanced: "Sub-stream selection, timing knobs, aspect ratio and the last-resort page reload."
+	advanced: "Sub-stream selection, snapshot refresh interval, aspect ratio and the last-resort page reload."
 };
 function ot(e) {
 	return {
@@ -1997,7 +1998,7 @@ function $(e, t) {
 customElements.get("simpler-camera-card") || customElements.define(P, Q);
 //#endregion
 //#region src/index.ts
-var Vt = "0.5.1";
+var Vt = "0.6.0";
 window.customCards = window.customCards ?? [], window.customCards.some((e) => e.type === "simpler-camera-card") || window.customCards.push({
 	type: P,
 	name: "Simpler Camera Card",

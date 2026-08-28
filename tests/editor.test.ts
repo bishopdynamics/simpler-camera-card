@@ -161,7 +161,14 @@ describe('config form schema', () => {
 
   it('puts the common options at the top level', () => {
     const topLevel = form.schema.filter((node) => !isConfigFormGroup(node)).map((n) => n.name);
-    expect(topLevel).toEqual(['camera', 'mode', 'tap_to_live', 'overlay', 'overlay_text']);
+    expect(topLevel).toEqual([
+      'camera',
+      'mode',
+      'tap_to_live',
+      'live_duration',
+      'overlay',
+      'overlay_text',
+    ]);
   });
 
   it('picks the camera with a Frigate-filtered entity selector', () => {
@@ -209,10 +216,10 @@ describe('config form schema', () => {
     });
   });
 
-  it('offers a tap-to-live toggle and a live-duration number field, minimum 5 seconds', () => {
+  it('offers a tap-to-live toggle and a live-duration slider, 5 to 60 seconds in steps of 5', () => {
     expect(field('tap_to_live').selector).toEqual({ boolean: {} });
     expect(field('live_duration').selector).toEqual({
-      number: { min: 5, step: 0.5, mode: 'box', unit_of_measurement: 's' },
+      number: { min: 5, max: 60, step: 5, mode: 'slider', unit_of_measurement: 's' },
     });
   });
 });

@@ -239,7 +239,7 @@ describe('normalizeConfig — defaults', () => {
       type: CARD_TYPE,
       camera: 'camera.front_yard',
       overlay: 'none',
-      tap_action: { action: 'more-info' },
+      tap_action: { action: 'none' },
       hold_action: { action: 'none' },
       double_tap_action: { action: 'none' },
       aspect_ratio: '16 / 9',
@@ -690,7 +690,11 @@ describe('SimplerCameraCard — actions', () => {
   it('fires hass-action from the host with the camera entity and every slot', async () => {
     const fired = collectHassActions();
     const card = mountCard(
-      { ...base, hold_action: { action: 'navigate', navigation_path: '/lovelace/cams' } },
+      {
+        ...base,
+        tap_action: { action: 'more-info' },
+        hold_action: { action: 'navigate', navigation_path: '/lovelace/cams' },
+      },
       { endpoint: neverResolves() },
     );
     await settle(card);
@@ -711,7 +715,10 @@ describe('SimplerCameraCard — actions', () => {
   });
 
   it('lets the event out of the shadow root by way of the host element', async () => {
-    const card = mountCard(base, { endpoint: neverResolves() });
+    const card = mountCard(
+      { ...base, tap_action: { action: 'more-info' } },
+      { endpoint: neverResolves() },
+    );
     await settle(card);
 
     const targets: EventTarget[] = [];
@@ -761,7 +768,10 @@ describe('SimplerCameraCard — actions', () => {
   });
 
   it('exposes button semantics only while the tap action does something', async () => {
-    const card = mountCard(base, { endpoint: neverResolves() });
+    const card = mountCard(
+      { ...base, tap_action: { action: 'more-info' } },
+      { endpoint: neverResolves() },
+    );
     await settle(card);
 
     let surface = container(card);
@@ -782,7 +792,10 @@ describe('SimplerCameraCard — actions', () => {
 
   it('activates from the keyboard', async () => {
     const fired = collectHassActions();
-    const card = mountCard(base, { endpoint: neverResolves() });
+    const card = mountCard(
+      { ...base, tap_action: { action: 'more-info' } },
+      { endpoint: neverResolves() },
+    );
     await settle(card);
 
     container(card).dispatchEvent(
@@ -794,7 +807,10 @@ describe('SimplerCameraCard — actions', () => {
 
   it('stops listening once the card leaves the DOM, and listens again on return', async () => {
     const fired = collectHassActions();
-    const card = mountCard(base, { endpoint: neverResolves() });
+    const card = mountCard(
+      { ...base, tap_action: { action: 'more-info' } },
+      { endpoint: neverResolves() },
+    );
     await settle(card);
     const surface = container(card);
 
@@ -1044,7 +1060,7 @@ describe('SimplerCameraCard — snapshot mode', () => {
     installImageStub();
     const fired = collectHassActions();
     const card = mountCard(
-      { ...snapshotBase, overlay: 'name' },
+      { ...snapshotBase, overlay: 'name', tap_action: { action: 'more-info' } },
       { endpoint: stubEndpoint({ resolvePosterUrl: countingPoster().resolvePosterUrl }) },
     );
     await vi.advanceTimersByTimeAsync(0);
@@ -1290,14 +1306,24 @@ describe('SimplerCameraCard — tap to go live', () => {
   });
 
   it('leaves tap_action alone without tap_to_live, and under mode: live', async () => {
-    const plain = await rig({ ...tapLiveBase, tap_to_live: false });
+    const plain = await rig({
+      ...tapLiveBase,
+      tap_to_live: false,
+      tap_action: { action: 'more-info' },
+    });
     await tapAndSettle(plain.card);
     expect(plain.fired.map((detail) => detail.action)).toEqual(['tap']);
     expect(plain.players).toHaveLength(0);
     expect(plain.card.shadowRoot!.querySelector('video')).toBeNull();
 
     // Under `mode: live` both options are ignored, exactly like refresh_interval.
-    const live = await rig({ ...base, mode: 'live', tap_to_live: true, live_duration: 8 });
+    const live = await rig({
+      ...base,
+      mode: 'live',
+      tap_to_live: true,
+      live_duration: 8,
+      tap_action: { action: 'more-info' },
+    });
     await tapAndSettle(live.card);
     expect(live.fired.map((detail) => detail.action)).toEqual(['tap']);
     expect(container(live.card).getAttribute('aria-label')).toBe('Front Yard');

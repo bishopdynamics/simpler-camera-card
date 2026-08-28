@@ -180,7 +180,7 @@ export const VIEW_MODES: readonly ViewMode[] = ['live', 'snapshot'];
  * stream: front_yard_sub
  * overlay: name
  * overlay_text: "Front Yard"
- * tap_action: { action: more-info }
+ * tap_action: { action: none }
  * hold_action: { action: none }
  * double_tap_action: { action: none }
  * aspect_ratio: "16:9"
@@ -204,7 +204,7 @@ export interface SimplerCameraCardConfig {
   overlay?: OverlayMode;
   /** Label text for `overlay: custom` (required in that mode). */
   overlay_text?: string;
-  /** Default `{ action: 'more-info' }`. */
+  /** Default `{ action: 'none' }`. */
   tap_action?: ActionConfig;
   /** Default `{ action: 'none' }`. */
   hold_action?: ActionConfig;
@@ -278,7 +278,7 @@ export interface NormalizedCardConfig extends SimplerCameraCardConfig {
 export const CONFIG_DEFAULTS = {
   overlay: 'none' as OverlayMode,
   aspectRatio: '16 / 9',
-  tapAction: { action: 'more-info' } as ActionConfig,
+  tapAction: { action: 'none' } as ActionConfig,
   holdAction: { action: 'none' } as ActionConfig,
   doubleTapAction: { action: 'none' } as ActionConfig,
   reloadAfterMinutesDown: 0,

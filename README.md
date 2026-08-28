@@ -110,7 +110,7 @@ reload_after_minutes_down: 30     # last-resort page reload
 | `stream` | string | the entity's `camera_name` attribute | go2rtc stream name. This is how you select a sub-stream — see below. |
 | `overlay` | `none` \| `name` \| `custom` | `none` | Label drawn across the bottom of the video. `name` uses the entity's friendly name. |
 | `overlay_text` | string | — | Label text. **Required** when `overlay: custom`; ignored otherwise. |
-| `tap_action` | action object | `{ action: more-info }` | Fired as HA's standard `hass-action`, so `more-info` opens Home Assistant's own live camera dialog. |
+| `tap_action` | action object | `{ action: none }` | Fired as HA's standard `hass-action`. Set `action: more-info` to open Home Assistant's own live camera dialog on tap. |
 | `hold_action` | action object | `{ action: none }` | Press and hold for 500 ms. |
 | `double_tap_action` | action object | `{ action: none }` | Two taps within 250 ms. |
 | `aspect_ratio` | `"W:H"` or number | `16:9` | Accepts `"16:9"`, `"16/9"` or a bare number such as `1.78`. The video is letterboxed inside it (`object-fit: contain`). |
@@ -118,7 +118,7 @@ reload_after_minutes_down: 30     # last-resort page reload
 | `mode` | `live` \| `snapshot` | `live` | `live` decodes the MSE stream continuously; `snapshot` polls a still image instead. See [Snapshot mode](#snapshot-mode). |
 | `refresh_interval` | number (seconds) | `5` | How often a new still is fetched. Only meaningful under `mode: snapshot`; minimum `1`, fractional values allowed. |
 | `tap_to_live` | boolean | `false` | Only meaningful under `mode: snapshot`. When `true`, tapping the card temporarily switches it to the real live stream instead of firing `tap_action`. See [Tap to go live](#tap-to-go-live). |
-| `live_duration` | number (seconds) | `60` | How long the temporary live window from `tap_to_live` stays up before reverting to snapshots. Only meaningful with `tap_to_live: true`; minimum `5`, fractional values allowed. |
+| `live_duration` | number (seconds) | `60` | How long the temporary live window from `tap_to_live` stays up before reverting to snapshots. Only meaningful with `tap_to_live: true`. In YAML, minimum `5`, fractional values allowed; the visual editor offers a 5–60 second slider in steps of 5. |
 
 Action objects are Home Assistant's standard ones. `action:` must be one of `more-info`, `toggle`,
 `navigate`, `url`, `perform-action`, `assist`, `none`; the remaining fields (`navigation_path`,
@@ -138,7 +138,8 @@ Two gesture details worth knowing, because they are deliberate:
 
 The card is announced to screen readers as a button (and is keyboard-activatable with Enter/Space)
 only when its tap does something: `tap_action` is something other than `none`, or the tap is the
-[tap-to-go-live](#tap-to-go-live) toggle.
+[tap-to-go-live](#tap-to-go-live) toggle. With the default `tap_action: none`, a plain card is not
+a button — set `tap_action: { action: more-info }` (or another action) to make it one.
 
 ## Sub-streams
 
