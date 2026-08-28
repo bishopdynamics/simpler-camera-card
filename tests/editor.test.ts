@@ -43,6 +43,8 @@ const EVERY_OPTION: SimplerCameraCardConfig = {
   reload_after_minutes_down: 30,
   mode: 'snapshot',
   refresh_interval: 4,
+  tap_to_live: true,
+  live_duration: 30,
 };
 
 const CONFIG_KEYS = Object.keys(EVERY_OPTION).filter((key) => key !== 'type');
@@ -82,6 +84,8 @@ function coerce(raw: string): unknown {
   const value = raw.trim();
   if (/^".*"$/.test(value) || /^'.*'$/.test(value)) return value.slice(1, -1);
   if (/^-?\d+(\.\d+)?$/.test(value)) return Number(value);
+  if (value === 'true') return true;
+  if (value === 'false') return false;
   return value;
 }
 
@@ -204,6 +208,13 @@ describe('config form schema', () => {
       number: { min: 1, step: 0.5, mode: 'box', unit_of_measurement: 's' },
     });
   });
+
+  it('offers a tap-to-live toggle and a live-duration number field, minimum 5 seconds', () => {
+    expect(field('tap_to_live').selector).toEqual({ boolean: {} });
+    expect(field('live_duration').selector).toEqual({
+      number: { min: 5, step: 0.5, mode: 'box', unit_of_measurement: 's' },
+    });
+  });
 });
 
 describe('computeLabel / computeHelper', () => {
@@ -248,7 +259,7 @@ describe('assertConfig', () => {
   it('accepts every example config in the README', () => {
     // Guard the guard: if the README parser silently produced junk, every
     // assertion below would pass vacuously. The fullest example is spelled out.
-    expect(readmeExamples).toHaveLength(4);
+    expect(readmeExamples).toHaveLength(5);
     expect(readmeExamples[1]).toEqual({
       type: CARD_TYPE,
       camera: 'camera.front_yard',
@@ -259,12 +270,20 @@ describe('assertConfig', () => {
       aspect_ratio: '16:9',
       reload_after_minutes_down: 30,
     });
-    // The Snapshot mode example, last in the file.
+    // The Snapshot mode example.
     expect(readmeExamples[3]).toEqual({
       type: CARD_TYPE,
       camera: 'camera.front_yard',
       mode: 'snapshot',
       refresh_interval: 4,
+    });
+    // The Tap to go live example, last in the file.
+    expect(readmeExamples[4]).toEqual({
+      type: CARD_TYPE,
+      camera: 'camera.front_yard',
+      mode: 'snapshot',
+      tap_to_live: true,
+      live_duration: 30,
     });
 
     for (const example of readmeExamples) {

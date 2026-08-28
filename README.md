@@ -117,6 +117,8 @@ reload_after_minutes_down: 30     # last-resort page reload
 | `reload_after_minutes_down` | number (minutes) | `0` (off) | Escape hatch: reload the whole page after this many consecutive minutes down. |
 | `mode` | `live` \| `snapshot` | `live` | `live` decodes the MSE stream continuously; `snapshot` polls a still image instead. See [Snapshot mode](#snapshot-mode). |
 | `refresh_interval` | number (seconds) | `5` | How often a new still is fetched. Only meaningful under `mode: snapshot`; minimum `1`, fractional values allowed. |
+| `tap_to_live` | boolean | `false` | Only meaningful under `mode: snapshot`. When `true`, tapping the card temporarily switches it to the real live stream instead of firing `tap_action`. See [Tap to go live](#tap-to-go-live). |
+| `live_duration` | number (seconds) | `60` | How long the temporary live window from `tap_to_live` stays up before reverting to snapshots. Only meaningful with `tap_to_live: true`; minimum `5`, fractional values allowed. |
 
 Action objects are Home Assistant's standard ones. `action:` must be one of `more-info`, `toggle`,
 `navigate`, `url`, `perform-action`, `assist`, `none`; the remaining fields (`navigation_path`,
@@ -135,7 +137,8 @@ Two gesture details worth knowing, because they are deliberate:
 - with the default `hold_action: none`, a slow press is still a tap, rather than a dead zone.
 
 The card is announced to screen readers as a button (and is keyboard-activatable with Enter/Space)
-only when `tap_action` is something other than `none`.
+only when its tap does something: `tap_action` is something other than `none`, or the tap is the
+[tap-to-go-live](#tap-to-go-live) toggle.
 
 ## Sub-streams
 
@@ -173,6 +176,27 @@ If what you actually want is smooth low-framerate *video* rather than a slidesho
 server-side transcoding, which this card does not do. Define an ffmpeg `fps=`-filtered stream in
 go2rtc and select it with the existing `stream:` option — go2rtc does the frame-dropping, not the
 card.
+
+### Tap to go live
+
+Set `tap_to_live: true` on a `mode: snapshot` card to make a tap temporarily switch it to the real
+live stream, for `live_duration` seconds (default `60`, minimum `5`, fractional values allowed) —
+then it reverts back to snapshot polling on its own. Tapping again while live reverts early. While
+the temporary live window is playing, a small "LIVE · Ns" countdown pill shows how much longer it
+has left, the same way the reconnect status pill appears when the stream is down.
+
+`tap_action` is **not** fired on a card with `tap_to_live: true` — the tap is consumed by the
+live/snapshot toggle instead. `hold_action` and `double_tap_action` are unaffected, so bind
+`hold_action: { action: more-info }` if you still want a way to reach the more-info dialog. This
+option (and `live_duration`) is ignored under `mode: live`, like `refresh_interval`.
+
+```yaml
+type: custom:simpler-camera-card
+camera: camera.front_yard
+mode: snapshot
+tap_to_live: true
+live_duration: 30
+```
 
 ## How recovery works
 

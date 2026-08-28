@@ -166,6 +166,11 @@ const SCHEMA: readonly ConfigFormNode[] = [
         name: 'refresh_interval',
         selector: { number: { min: 1, step: 0.5, mode: 'box', unit_of_measurement: 's' } },
       },
+      { name: 'tap_to_live', selector: { boolean: {} } },
+      {
+        name: 'live_duration',
+        selector: { number: { min: 5, step: 0.5, mode: 'box', unit_of_measurement: 's' } },
+      },
       {
         name: 'reload_after_minutes_down',
         selector: { number: { min: 0, mode: 'box', unit_of_measurement: 'min' } },
@@ -195,6 +200,8 @@ const LABELS: Record<string, string> = {
   aspect_ratio: 'Aspect ratio',
   mode: 'Display mode',
   refresh_interval: 'Snapshot refresh interval',
+  tap_to_live: 'Tap to go live',
+  live_duration: 'Live window duration',
   reload_after_minutes_down: 'Reload after minutes down',
   interactions: 'Interactions',
   advanced: 'Advanced',
@@ -218,6 +225,13 @@ const HELPERS: Record<string, string> = {
     'WebSocket or video decode, for low-resource kiosks.',
   refresh_interval:
     'Only applies in Snapshots mode: how often a new still is fetched. Minimum 1 second.',
+  tap_to_live:
+    'Only applies in Snapshots mode: a tap temporarily switches the card to the real live ' +
+    'stream instead of firing Tap action; a second tap reverts early. Use Hold action to reach ' +
+    'more-info while this is on.',
+  live_duration:
+    'How long the temporary live window stays up after a tap, before automatically reverting ' +
+    'to snapshots. Minimum 5 seconds.',
   reload_after_minutes_down:
     'Last resort: reload the whole page after this many consecutive minutes down. ' +
     '0 disables it.',
