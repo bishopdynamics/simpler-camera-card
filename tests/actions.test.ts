@@ -70,14 +70,14 @@ function collectHassActions(): CustomEvent<HassActionDetail>[] {
 }
 
 /** `null` stands for "Lovelace has not called setConfig yet". */
-function rig(initial: NormalizedCardConfig | null = config()): Rig {
+function rig(initial: NormalizedCardConfig | null = config(), onTap?: () => boolean): Rig {
   const target = document.createElement('div');
   document.body.appendChild(target);
 
   let current = initial;
   const events = collectHassActions();
 
-  const controller = new ActionController({ getConfig: () => current ?? undefined });
+  const controller = new ActionController({ getConfig: () => current ?? undefined, onTap });
   controller.attach(target);
 
   const built: Rig = {
@@ -171,6 +171,90 @@ describe('hass-action event shape', () => {
         }),
       ),
     ).toBe(false);
+  });
+
+  it('counts a tap_to_live snapshot card as interactive whatever tap_action says', () => {
+    const tapToLive = { mode: 'snapshot' as const, tap_to_live: true };
+    expect(
+      isInteractive(config({ ...tapToLive, tap_action: { action: 'none' } as ActionConfig })),
+    ).toBe(true);
+    // Under `mode: live` the option means nothing at all.
+    expect(
+      isInteractive(config({ tap_to_live: true, tap_action: { action: 'none' } as ActionConfig })),
+    ).toBe(false);
+  });
+});
+
+describe('ActionController — the onTap seam', () => {
+  it('consumes the tap it claims, and leaves the rest alone', () => {
+    vi.useFakeTimers();
+    let taps = 0;
+    const built = rig(
+      config({
+        mode: 'snapshot',
+        tap_to_live: true,
+        hold_action: { action: 'more-info' } as ActionConfig,
+        double_tap_action: { action: 'url', url_path: '/wall' } as ActionConfig,
+      }),
+      () => {
+        taps += 1;
+        return true;
+      },
+    );
+
+    tap(built.target);
+    vi.advanceTimersByTime(DOUBLE_TAP_MS * 2);
+    expect(taps).toBe(1);
+    expect(built.fired).toEqual([]);
+
+    // Hold and double-tap never consult it.
+    built.target.dispatchEvent(pointer('pointerdown'));
+    vi.advanceTimersByTime(HOLD_MS);
+    built.target.dispatchEvent(pointer('pointerup'));
+    tap(built.target);
+    tap(built.target);
+    vi.advanceTimersByTime(DOUBLE_TAP_MS * 2);
+
+    expect(taps).toBe(1);
+    expect(built.actions()).toEqual(['hold', 'double_tap']);
+  });
+
+  it('consumes a tap even when tap_action is none', () => {
+    vi.useFakeTimers();
+    let taps = 0;
+    const built = rig(
+      config({
+        mode: 'snapshot',
+        tap_to_live: true,
+        tap_action: { action: 'none' } as ActionConfig,
+      }),
+      () => {
+        taps += 1;
+        return true;
+      },
+    );
+
+    tap(built.target);
+    built.target.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }),
+    );
+
+    expect(taps).toBe(2);
+    expect(built.fired).toEqual([]);
+  });
+
+  it('falls through to tap_action when it declines the tap', () => {
+    vi.useFakeTimers();
+    let taps = 0;
+    const built = rig(config(), () => {
+      taps += 1;
+      return false;
+    });
+
+    tap(built.target);
+
+    expect(taps).toBe(1);
+    expect(built.actions()).toEqual(['tap']);
   });
 });
 

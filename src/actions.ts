@@ -25,6 +25,11 @@
  * - `double_tap` — a second tap begun within {@link DOUBLE_TAP_MS} of the first
  *   tap's release.
  *
+ * The one exception to "the card implements no action behaviour" is the
+ * {@link ActionControllerOptions.onTap} seam: the card may claim a *tap* for
+ * itself (that is how `tap_to_live` toggles the live window), in which case no
+ * `hass-action` is fired for it. Hold and double-tap are never intercepted.
+ *
  * ## The two "only when configured" optimisations
  *
  * Waiting to see whether a second tap arrives costs {@link DOUBLE_TAP_MS} of
@@ -151,11 +156,17 @@ export function fireHassAction(
  * whether it gets `role="button"`, `tabindex="0"`, a pointer cursor and
  * keyboard activation.
  *
- * Keyed on the *tap* action alone: a surface that only responds to a hold is
- * not a button, and announcing it as one to a screen reader would promise an
+ * Keyed on the *tap* alone: a surface that only responds to a hold is not a
+ * button, and announcing it as one to a screen reader would promise an
  * activation that Enter cannot deliver.
+ *
+ * A `tap_to_live` snapshot card is interactive whatever `tap_action` says —
+ * its tap is consumed locally by the go-live toggle (see
+ * {@link ActionControllerOptions.onTap}), so even `tap_action: none` does
+ * something real.
  */
 export function isInteractive(config: NormalizedCardConfig): boolean {
+  if (config.mode === 'snapshot' && config.tap_to_live) return true;
   return config.tap_action.action !== 'none';
 }
 
@@ -178,6 +189,16 @@ export interface ActionControllerOptions {
    * shadow root from the node Lovelace actually knows about.
    */
   getEventTarget?: () => HTMLElement | undefined;
+  /**
+   * Local handler for the *tap* gesture, consulted before the configured
+   * `tap_action` — the seam `tap_to_live` uses to make a tap toggle the live
+   * window instead of reaching Home Assistant.
+   *
+   * Returning `true` means "I consumed this tap": no `hass-action` is
+   * dispatched. Returning `false` (or being absent) leaves tap handling exactly
+   * as it was. Hold and double-tap never consult it.
+   */
+  onTap?: () => boolean;
 }
 
 /** The pointer currently being tracked. */
@@ -389,6 +410,10 @@ export class ActionController {
   /* ------------------------------------------------------------------ */
 
   private fire(action: GestureAction, config: NormalizedCardConfig): void {
+    // A local tap handler wins over the configured action. It sits *above* the
+    // `none` check deliberately: a `tap_to_live` card with `tap_action: none`
+    // still has to toggle.
+    if (action === 'tap' && this.options.onTap?.() === true) return;
     // `action: none` is a configured "do nothing" — no event at all, so HA is
     // never asked to no-op on the card's behalf.
     if (resolveAction(config, action).action === 'none') return;

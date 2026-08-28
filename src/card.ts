@@ -12,7 +12,10 @@
  *    `hass.connected` false→true edge). Under `mode: snapshot` it builds a
  *    {@link SnapshotLoop} instead — no supervisor, no player, no watchdog, no
  *    `<video>` — and routes the same lifecycle facts to `pause()` / `resume()` /
- *    `refreshNow()`.
+ *    `refreshNow()`. With `tap_to_live`, a tap swaps a snapshot card onto the
+ *    live stack for `live_duration` seconds and back again — one flag
+ *    (`_temporaryLive`) picking the *effective* mode, over machinery that is
+ *    already built to be torn down and rebuilt.
  * 3. **Degraded UX** — while the stream is not `playing` it shows the latest
  *    camera snapshot, dimmed, with a small status indicator; the snapshot is
  *    re-signed and refreshed every {@link POSTER_REFRESH_INTERVAL_MS} while the
@@ -311,6 +314,17 @@ export class SimplerCameraCard extends LitElement {
   /** Snapshot mode: the last config-class endpoint failure, for the status pill. */
   @state() private _snapshotError?: string;
 
+  /**
+   * `tap_to_live`: a tap has put this snapshot card into its temporary live
+   * window. While set, the card's *effective* mode is `live` — see
+   * {@link _effectiveMode} — so the supervisor stack runs instead of the
+   * snapshot loop.
+   */
+  @state() private _temporaryLive = false;
+
+  /** Milliseconds left in the temporary live window; drives the LIVE pill. */
+  @state() private _liveRemainingMs = 0;
+
   private _hass?: HomeAssistant;
 
   /** The stable media element; see {@link createVideoElement}. Live mode only. */
@@ -333,6 +347,7 @@ export class SimplerCameraCard extends LitElement {
   private readonly _actions = new ActionController({
     getConfig: () => this._config,
     getEventTarget: () => this,
+    onTap: () => this._onTapGesture(),
   });
 
   /** Resolver actually in use — the real one unless a test overrode it. */
@@ -342,6 +357,12 @@ export class SimplerCameraCard extends LitElement {
 
   /** Poster refresh interval handle, live only while the stream is down. */
   private _posterTimer?: ReturnType<typeof setInterval>;
+
+  /** Fires once, at the end of the temporary live window. */
+  private _liveWindowTimer?: ReturnType<typeof setTimeout>;
+
+  /** 1 Hz tick that counts {@link _liveRemainingMs} down for the LIVE pill. */
+  private _liveTickTimer?: ReturnType<typeof setInterval>;
 
   /** Guards against two pending `updateComplete` starts racing each other. */
   private _startScheduled = false;
@@ -443,6 +464,13 @@ export class SimplerCameraCard extends LitElement {
 
   private readonly _onVisibilityChange = (): void => {
     const hidden = document.visibilityState === 'hidden';
+    // A live window nobody is looking at is not worth keeping: the card goes
+    // back to being a snapshot card, and stays one when the tab returns. The
+    // fresh loop starts paused (see `_startSnapshotLoop`).
+    if (hidden && this._temporaryLive) {
+      this._revertToSnapshots();
+      return;
+    }
     // Pausing a poll loop is free (no socket, no decoder), so snapshot mode
     // needs none of the supervisor's teardown grace period.
     if (hidden) this._snapshot?.pause();
@@ -467,9 +495,13 @@ export class SimplerCameraCard extends LitElement {
    * The start is deferred to `updateComplete` so the `<video>` is actually in
    * the document before a `MediaSource` is attached to it.
    *
-   * `config.mode` picks exactly one of the two engines: a live card never builds
-   * a {@link SnapshotLoop}, and a snapshot card never builds a supervisor,
-   * a player or a watchdog.
+   * The {@link _effectiveMode} picks exactly one of the two engines: a live card
+   * never builds a {@link SnapshotLoop}, and a snapshot card never builds a
+   * supervisor, a player or a watchdog — except inside a `tap_to_live` window,
+   * which is precisely a snapshot card temporarily running the live engine.
+   *
+   * The mode is read inside the deferred callback, not before it, so a toggle
+   * that lands while a start is already scheduled still gets the right engine.
    */
   private _maybeStart(): void {
     if (this._supervisor || this._snapshot || this._startScheduled) return;
@@ -480,9 +512,23 @@ export class SimplerCameraCard extends LitElement {
       this._startScheduled = false;
       if (this._supervisor || this._snapshot) return;
       if (!this.isConnected || !this._config || !this._hass) return;
-      if (this._config.mode === 'snapshot') this._startSnapshotLoop(this._config);
+      if (this._effectiveMode === 'snapshot') this._startSnapshotLoop(this._config);
       else this._startSupervisor(this._config);
     });
+  }
+
+  /**
+   * The mode the card is *behaving* as right now.
+   *
+   * Identical to `config.mode` except inside a `tap_to_live` window, where a
+   * snapshot card runs the live engine. Every runtime and render branch reads
+   * this rather than `config.mode`; a `mode: live` card never consults
+   * `tap_to_live` at all.
+   */
+  private get _effectiveMode(): ViewMode {
+    const config = this._config;
+    if (!config) return CONFIG_DEFAULTS.mode;
+    return config.mode === 'snapshot' && this._temporaryLive ? 'live' : config.mode;
   }
 
   private _startSupervisor(config: NormalizedCardConfig): void {
@@ -533,6 +579,13 @@ export class SimplerCameraCard extends LitElement {
     });
     this._snapshot = loop;
     loop.start();
+    // A loop built while the dashboard is hidden must not keep polling — the
+    // ordinary case when a `tap_to_live` window is reverted *by* the tab being
+    // hidden, since the loop is constructed after that event has been handled.
+    // `start()`'s immediate poll is already in flight; pausing abandons it
+    // (its frame is dropped) and cancels the interval, so a hidden dashboard
+    // costs one signed URL and nothing after it.
+    if (document.visibilityState === 'hidden') loop.pause();
   }
 
   private _stopSnapshotLoop(): void {
@@ -542,10 +595,87 @@ export class SimplerCameraCard extends LitElement {
     this._snapshotError = undefined;
   }
 
-  /** Tear down whichever engine is running; safe when neither is. */
+  /**
+   * Tear down whichever engine is running; safe when neither is.
+   *
+   * This is also the single place the temporary live window is cancelled, so
+   * every existing teardown path (`setConfig`, `disconnectedCallback`) clears
+   * its flag and both its timers without knowing the feature exists.
+   */
   private _stopEverything(): void {
+    this._clearLiveWindow();
     this._stopSupervisor();
     this._stopSnapshotLoop();
+  }
+
+  /* ------------------------------------------------------------------ */
+  /* tap_to_live: the temporary live window                              */
+  /* ------------------------------------------------------------------ */
+
+  /**
+   * The tap seam handed to {@link ActionController}.
+   *
+   * Returns `true` when the tap was consumed by the toggle — which is exactly
+   * when the card is a snapshot card with `tap_to_live`. Every other card falls
+   * through to the configured `tap_action`, unchanged.
+   */
+  private _onTapGesture(): boolean {
+    const config = this._config;
+    if (!config || config.mode !== 'snapshot' || !config.tap_to_live) return false;
+    if (this._temporaryLive) this._revertToSnapshots();
+    else this._goLive();
+    return true;
+  }
+
+  /**
+   * Swap the snapshot loop for the live stack and arm the window.
+   *
+   * `_snapshotUrl` is deliberately *not* cleared: it is what `render()` shows as
+   * the (dimmed) poster while the stream connects, so the transition never
+   * blanks. `_posterUrl`, by contrast, can only be left over from an earlier
+   * window and would be stale, so it goes.
+   */
+  private _goLive(): void {
+    const config = this._config;
+    if (!config) return;
+    this._stopEverything();
+    this._temporaryLive = true;
+    this._posterUrl = undefined;
+    this._liveRemainingMs = Math.max(0, config.live_duration) * 1000;
+    this._liveWindowTimer = setTimeout(() => {
+      this._liveWindowTimer = undefined;
+      this._revertToSnapshots();
+    }, this._liveRemainingMs);
+    // Countdown only; the window's end is the timer above, so a tick that
+    // drifts can never cut the window short or extend it.
+    this._liveTickTimer = setInterval(() => {
+      this._liveRemainingMs = Math.max(0, this._liveRemainingMs - 1000);
+    }, 1000);
+    this._maybeStart();
+  }
+
+  /**
+   * End the window: back to polling stills. The new loop's immediate first poll
+   * is what refreshes the frame the live stream leaves behind.
+   */
+  private _revertToSnapshots(): void {
+    if (!this._temporaryLive) return;
+    this._stopEverything();
+    this._maybeStart();
+  }
+
+  /** Cancel the window and its countdown. Safe when no window is running. */
+  private _clearLiveWindow(): void {
+    this._temporaryLive = false;
+    this._liveRemainingMs = 0;
+    if (this._liveWindowTimer !== undefined) {
+      clearTimeout(this._liveWindowTimer);
+      this._liveWindowTimer = undefined;
+    }
+    if (this._liveTickTimer !== undefined) {
+      clearInterval(this._liveTickTimer);
+      this._liveTickTimer = undefined;
+    }
   }
 
   /* ------------------------------------------------------------------ */
@@ -651,17 +781,21 @@ export class SimplerCameraCard extends LitElement {
     const config = this._config;
     if (!config) return nothing;
 
-    const snapshotMode = config.mode === 'snapshot';
+    const snapshotMode = this._effectiveMode === 'snapshot';
     const entity = this._hass?.states?.[config.camera];
     // "We have something real to show": a playing stream, or a decoded frame.
     const showingMedia = snapshotMode
       ? this._snapshotUrl !== undefined
       : this._streamState === 'playing';
     // `entity_picture` is the unsigned fallback used until the first signed
-    // snapshot resolves, so a fresh card is never a black rectangle.
+    // snapshot resolves, so a fresh card is never a black rectangle. The last
+    // decoded still sits between the two: inside a `tap_to_live` window it is
+    // what keeps the card from blanking while the stream connects (in plain
+    // snapshot mode a defined `_snapshotUrl` means `showingMedia`, so it never
+    // reaches this expression).
     const poster = showingMedia
       ? undefined
-      : (this._posterUrl ?? entity?.attributes?.entity_picture);
+      : (this._posterUrl ?? this._snapshotUrl ?? entity?.attributes?.entity_picture);
     // The one media layer: the stable `<video>` in live mode, a plain refreshing
     // `<img>` in snapshot mode (nothing external holds a reference to it, so it
     // needs none of the video element's node-value stability).
@@ -673,13 +807,23 @@ export class SimplerCameraCard extends LitElement {
     const overlayText = this._overlayText(config, entity?.attributes?.friendly_name);
     const status = snapshotMode
       ? this._snapshotStatusText(Boolean(entity))
-      : showingMedia
-        ? undefined
-        : this._statusText(Boolean(entity));
+      : this._temporaryLive && this._streamState === 'playing'
+        ? // The one pill that is not a problem report: it says the window is
+          // running, and for how much longer.
+          `LIVE · ${Math.ceil(this._liveRemainingMs / 1000)}s`
+        : showingMedia
+          ? undefined
+          : this._statusText(Boolean(entity));
     // Only a card whose *tap* does something is announced (and focusable) as a
     // button — see `isInteractive`.
     const interactive = isInteractive(config);
-    const label = entity?.attributes?.friendly_name ?? config.camera;
+    const name = entity?.attributes?.friendly_name ?? config.camera;
+    // On a tap-to-live card the tap is a toggle, so the label says which way it
+    // goes rather than just naming the camera.
+    const label =
+      config.mode === 'snapshot' && config.tap_to_live
+        ? `${name} — ${this._temporaryLive ? 'back to snapshots' : 'go live'}`
+        : name;
 
     return html`
       <ha-card>

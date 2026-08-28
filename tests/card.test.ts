@@ -191,6 +191,10 @@ function snapshotSrc(card: SimplerCameraCard): string | undefined {
   return card.shadowRoot?.querySelector('img.snapshot')?.getAttribute('src') ?? undefined;
 }
 
+function posterSrc(card: SimplerCameraCard): string | undefined {
+  return card.shadowRoot?.querySelector('img.poster')?.getAttribute('src') ?? undefined;
+}
+
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
@@ -1051,5 +1055,311 @@ describe('SimplerCameraCard — snapshot mode', () => {
 
     tapOn(container(card));
     expect(fired.map((detail) => detail.action)).toEqual(['tap']);
+  });
+});
+
+describe('SimplerCameraCard — tap to go live', () => {
+  /** A snapshot card that goes live for 10 s on a tap. */
+  const tapLiveBase = {
+    ...base,
+    mode: 'snapshot',
+    refresh_interval: 2,
+    tap_to_live: true,
+    live_duration: 10,
+  };
+
+  interface LiveRig {
+    card: SimplerCameraCard;
+    players: FakePlayer[];
+    poster: ReturnType<typeof countingPoster>;
+    fired: HassActionDetail[];
+    starts: () => number;
+    destroys: () => number;
+  }
+
+  /**
+   * Mount a card with fake timers, a stubbed `Image`, a counting poster
+   * resolver and a recording player factory, then let the first snapshot land.
+   */
+  async function rig(
+    config: Record<string, unknown> = tapLiveBase,
+    endpointOverrides: Partial<EndpointResolver> = {},
+  ): Promise<LiveRig> {
+    vi.useFakeTimers();
+    installImageStub();
+    const fired = collectHassActions();
+    const poster = countingPoster();
+    const { players, create } = playerFactory();
+    const started = vi.spyOn(SnapshotLoop.prototype, 'start');
+    const destroyed = vi.spyOn(SnapshotLoop.prototype, 'destroy');
+    const card = mountCard(config, {
+      createPlayer: create,
+      endpoint: stubEndpoint({ resolvePosterUrl: poster.resolvePosterUrl, ...endpointOverrides }),
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    await settle(card);
+    return {
+      card,
+      players,
+      poster,
+      fired,
+      starts: () => started.mock.calls.length,
+      destroys: () => destroyed.mock.calls.length,
+    };
+  }
+
+  /** A tap, plus everything the resulting engine swap needs to settle. */
+  async function tapAndSettle(card: SimplerCameraCard): Promise<void> {
+    tapOn(container(card));
+    await vi.advanceTimersByTimeAsync(0);
+    await settle(card);
+  }
+
+  it('swaps the snapshot loop for the live stack on a tap, firing no tap_action', async () => {
+    const { card, players, fired, destroys } = await rig();
+    expect(players).toHaveLength(0);
+    expect(snapshotSrc(card)).toContain('sig=0');
+
+    await tapAndSettle(card);
+
+    expect(destroys()).toBe(1);
+    expect(players).toHaveLength(1);
+    expect(players[0].video).toBe(card.shadowRoot!.querySelector('video'));
+    // The tap was consumed by the toggle: Home Assistant hears nothing.
+    expect(fired).toEqual([]);
+  });
+
+  it('reverts on a second tap, with an immediate fresh poll', async () => {
+    const { card, players, poster, starts, destroys } = await rig();
+    await tapAndSettle(card);
+    const pollsBefore = poster.calls();
+
+    await tapAndSettle(card);
+
+    expect(players[0].destroyed).toBe(true);
+    expect(starts()).toBe(2);
+    expect(destroys()).toBe(1);
+    expect(card.shadowRoot!.querySelector('video')).toBeNull();
+    // The new loop polls at once rather than waiting out an interval.
+    expect(poster.calls()).toBeGreaterThan(pollsBefore);
+    expect(snapshotSrc(card)).toBeDefined();
+  });
+
+  it('reverts when the window expires, honouring a fractional duration', async () => {
+    const { card, players, starts } = await rig({ ...tapLiveBase, live_duration: 7.5 });
+    await tapAndSettle(card);
+    expect(players).toHaveLength(1);
+
+    await vi.advanceTimersByTimeAsync(7_000);
+    await settle(card);
+    expect(players[0].destroyed).toBe(false);
+    expect(starts()).toBe(1);
+
+    await vi.advanceTimersByTimeAsync(500);
+    await settle(card);
+
+    expect(players[0].destroyed).toBe(true);
+    expect(starts()).toBe(2);
+    expect(card.shadowRoot!.querySelector('video')).toBeNull();
+  });
+
+  it('reverts when the dashboard is hidden, and comes back as a snapshot card', async () => {
+    const visibility = { value: 'visible' };
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => visibility.value,
+    });
+    try {
+      const { card, players, poster } = await rig();
+      await tapAndSettle(card);
+      const pollsWhileLive = poster.calls();
+
+      visibility.value = 'hidden';
+      document.dispatchEvent(new Event('visibilitychange'));
+      await vi.advanceTimersByTimeAsync(0);
+      await settle(card);
+
+      expect(players[0].destroyed).toBe(true);
+      expect(poster.calls()).toBeGreaterThan(pollsWhileLive);
+
+      // The restarted loop is paused: neither it nor the poster refresh spends
+      // a request while the dashboard is hidden.
+      const pollsWhileHidden = poster.calls();
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(poster.calls()).toBe(pollsWhileHidden);
+
+      visibility.value = 'visible';
+      document.dispatchEvent(new Event('visibilitychange'));
+      await vi.advanceTimersByTimeAsync(0);
+      await settle(card);
+
+      // Snapshots resume; the live window does not.
+      expect(poster.calls()).toBeGreaterThan(pollsWhileHidden);
+      expect(players).toHaveLength(1);
+      expect(card.shadowRoot!.querySelector('video')).toBeNull();
+      expect(snapshotSrc(card)).toBeDefined();
+    } finally {
+      delete (document as unknown as Record<string, unknown>).visibilityState;
+    }
+  });
+
+  it('keeps the last still on screen while the stream connects', async () => {
+    // A window long enough that the poster refresh below stays inside it.
+    const { card } = await rig(
+      { ...tapLiveBase, live_duration: 30 },
+      { resolveSignedWsUrl: () => new Promise<string>(() => {}) },
+    );
+    expect(snapshotSrc(card)).toContain('sig=0');
+
+    tapOn(container(card));
+    await card.updateComplete;
+
+    // The <img class="snapshot"> is gone (live mode owns the media layer), so
+    // the poster is all that stands between the user and a black rectangle.
+    expect(snapshotSrc(card)).toBeUndefined();
+    expect(posterSrc(card)).toContain('sig=0');
+
+    // …and it never blanks while the connect drags on.
+    await settle(card);
+    expect(posterSrc(card)).toBeDefined();
+    await vi.advanceTimersByTimeAsync(POSTER_REFRESH_INTERVAL_MS);
+    await settle(card);
+    expect(posterSrc(card)).toBeDefined();
+  });
+
+  it('shows a counting-down LIVE pill, but only once the stream plays', async () => {
+    const { card, players } = await rig({ ...tapLiveBase, live_duration: 8 });
+    await tapAndSettle(card);
+    // Connecting is still reported the way live mode always reports it.
+    expect(statusText(card)).toBe('Connecting…');
+
+    players[0].onPlaying();
+    await settle(card);
+    expect(statusText(card)).toBe('LIVE · 8s');
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    await settle(card);
+    expect(statusText(card)).toBe('LIVE · 7s');
+
+    await vi.advanceTimersByTimeAsync(3_000);
+    await settle(card);
+    expect(statusText(card)).toBe('LIVE · 4s');
+
+    // The window ends: the pill goes with it.
+    await vi.advanceTimersByTimeAsync(4_000);
+    await settle(card);
+    expect(statusText(card)).toBeUndefined();
+    expect(players[0].destroyed).toBe(true);
+  });
+
+  it('suppresses the snapshot status text for the whole window', async () => {
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    const { card } = await rig(tapLiveBase, {
+      resolveSignedWsUrl: () => new Promise<string>(() => {}),
+      resolvePosterUrl: async () => {
+        throw new EndpointError('entity-not-found', 'Camera entity was not found.');
+      },
+    });
+    expect(statusText(card)).toBe('Snapshot unavailable — Camera entity was not found.');
+
+    await tapAndSettle(card);
+    expect(statusText(card)).toBe('Connecting…');
+
+    await vi.advanceTimersByTimeAsync(6_000);
+    await settle(card);
+    expect(statusText(card)).toBe('Connecting…');
+  });
+
+  it('toggles even when tap_action is none, and announces which way the tap goes', async () => {
+    const { card, players, fired } = await rig({
+      ...tapLiveBase,
+      tap_action: { action: 'none' },
+    });
+
+    let surface = container(card);
+    expect(surface.getAttribute('role')).toBe('button');
+    expect(surface.getAttribute('tabindex')).toBe('0');
+    expect(surface.getAttribute('aria-label')).toBe('Front Yard — go live');
+
+    await tapAndSettle(card);
+
+    expect(players).toHaveLength(1);
+    expect(fired).toEqual([]);
+    surface = container(card);
+    expect(surface.getAttribute('aria-label')).toBe('Front Yard — back to snapshots');
+  });
+
+  it('leaves tap_action alone without tap_to_live, and under mode: live', async () => {
+    const plain = await rig({ ...tapLiveBase, tap_to_live: false });
+    await tapAndSettle(plain.card);
+    expect(plain.fired.map((detail) => detail.action)).toEqual(['tap']);
+    expect(plain.players).toHaveLength(0);
+    expect(plain.card.shadowRoot!.querySelector('video')).toBeNull();
+
+    // Under `mode: live` both options are ignored, exactly like refresh_interval.
+    const live = await rig({ ...base, mode: 'live', tap_to_live: true, live_duration: 8 });
+    await tapAndSettle(live.card);
+    expect(live.fired.map((detail) => detail.action)).toEqual(['tap']);
+    expect(container(live.card).getAttribute('aria-label')).toBe('Front Yard');
+    // One player from the ordinary live start, none from a toggle.
+    expect(live.players).toHaveLength(1);
+  });
+
+  it('leaves hold and double-tap untouched on an eligible card', async () => {
+    const { card, players, fired } = await rig({
+      ...tapLiveBase,
+      hold_action: { action: 'toggle' },
+      double_tap_action: { action: 'url', url_path: '/wall' },
+    });
+    const surface = container(card);
+
+    surface.dispatchEvent(pointer('pointerdown'));
+    await vi.advanceTimersByTimeAsync(HOLD_MS);
+    surface.dispatchEvent(pointer('pointerup'));
+
+    tapOn(surface);
+    tapOn(surface);
+    await vi.advanceTimersByTimeAsync(DOUBLE_TAP_MS * 2);
+    await settle(card);
+
+    expect(fired.map((detail) => detail.action)).toEqual(['hold', 'double_tap']);
+    // Neither gesture went live.
+    expect(players).toHaveLength(0);
+  });
+
+  it('tears the window down on setConfig, timers and all', async () => {
+    const { card, players, poster, starts } = await rig();
+    await tapAndSettle(card);
+
+    card.setConfig({ ...tapLiveBase, refresh_interval: 3 });
+    await vi.advanceTimersByTimeAsync(0);
+    await settle(card);
+
+    expect(players[0].destroyed).toBe(true);
+    expect(starts()).toBe(2);
+
+    // The window timer is gone: its expiry cannot fire a second revert, and the
+    // countdown cannot resurrect the pill.
+    const pollsAfterEdit = poster.calls();
+    await vi.advanceTimersByTimeAsync(30_000);
+    await settle(card);
+    expect(players).toHaveLength(1);
+    expect(starts()).toBe(2);
+    expect(statusText(card)).toBeUndefined();
+    expect(poster.calls()).toBeGreaterThan(pollsAfterEdit);
+  });
+
+  it('tears the window down when the card leaves the DOM, with no callbacks after', async () => {
+    const { card, players, poster, starts } = await rig();
+    await tapAndSettle(card);
+
+    card.remove();
+    const pollsWhileMounted = poster.calls();
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(players[0].destroyed).toBe(true);
+    expect(players).toHaveLength(1);
+    expect(starts()).toBe(1);
+    expect(poster.calls()).toBe(pollsWhileMounted);
   });
 });
