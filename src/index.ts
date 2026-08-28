@@ -7,7 +7,7 @@
 import './card';
 import { CARD_TAG } from './types';
 
-export const CARD_VERSION = '0.5.0';
+export const CARD_VERSION = '0.5.1';
 
 export { SimplerCameraCard, normalizeConfig } from './card';
 export * from './types';

@@ -119,9 +119,9 @@ const MODE_OPTIONS = optionsFrom(VIEW_MODES);
 /**
  * The form layout.
  *
- * The common path is flat and shallow — pick a camera, maybe a label, maybe an
- * aspect ratio — and the two things most configs never touch (the action slots
- * and the escape hatch) are folded into collapsed sections.
+ * The common path is flat and shallow — pick a camera, pick a display mode,
+ * maybe a label — and the things most configs never touch (the action slots,
+ * the tuning knobs and the escape hatch) are folded into collapsed sections.
  *
  * The schema is deliberately **static**: no field appears or disappears based on
  * another's value. `overlay_text` is always shown, and its helper text carries
@@ -137,9 +137,10 @@ const SCHEMA: readonly ConfigFormNode[] = [
     // already explain a non-Frigate pick.
     selector: { entity: { filter: { integration: 'frigate', domain: 'camera' } } },
   },
+  { name: 'mode', selector: { select: { mode: 'dropdown', options: MODE_OPTIONS } } },
+  { name: 'tap_to_live', selector: { boolean: {} } },
   { name: 'overlay', selector: { select: { mode: 'dropdown', options: OVERLAY_OPTIONS } } },
   { name: 'overlay_text', selector: { text: {} } },
-  { name: 'aspect_ratio', selector: { text: {} } },
   {
     name: 'interactions',
     type: 'expandable',
@@ -161,16 +162,15 @@ const SCHEMA: readonly ConfigFormNode[] = [
     flatten: true,
     schema: [
       { name: 'stream', selector: { text: {} } },
-      { name: 'mode', selector: { select: { mode: 'dropdown', options: MODE_OPTIONS } } },
       {
         name: 'refresh_interval',
         selector: { number: { min: 1, step: 0.5, mode: 'box', unit_of_measurement: 's' } },
       },
-      { name: 'tap_to_live', selector: { boolean: {} } },
       {
         name: 'live_duration',
         selector: { number: { min: 5, step: 0.5, mode: 'box', unit_of_measurement: 's' } },
       },
+      { name: 'aspect_ratio', selector: { text: {} } },
       {
         name: 'reload_after_minutes_down',
         selector: { number: { min: 0, mode: 'box', unit_of_measurement: 'min' } },
@@ -236,7 +236,7 @@ const HELPERS: Record<string, string> = {
     'Last resort: reload the whole page after this many consecutive minutes down. ' +
     '0 disables it.',
   interactions: 'What tapping, holding and double-tapping the card do.',
-  advanced: 'Sub-stream selection, display mode and the last-resort page reload.',
+  advanced: 'Sub-stream selection, timing knobs, aspect ratio and the last-resort page reload.',
 };
 
 /* -------------------------------------------------------------------------- */

@@ -161,7 +161,7 @@ describe('config form schema', () => {
 
   it('puts the common options at the top level', () => {
     const topLevel = form.schema.filter((node) => !isConfigFormGroup(node)).map((n) => n.name);
-    expect(topLevel).toEqual(['camera', 'overlay', 'overlay_text', 'aspect_ratio']);
+    expect(topLevel).toEqual(['camera', 'mode', 'tap_to_live', 'overlay', 'overlay_text']);
   });
 
   it('picks the camera with a Frigate-filtered entity selector', () => {
