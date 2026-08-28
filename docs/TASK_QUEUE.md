@@ -19,4 +19,6 @@ How to process/manage the Task Queue:
 
 ## Queue
 
-(empty — FEATURE_SPEC_tap_to_live accepted 2026-08-28, field-verified by James at v0.5.0)
+1. RELEASE_PLAN_1.0.md [in-progress]
+   1. Review-and-cleanup rounds toward the v1.0.0 public release (feature-complete declared at v0.6.1). Version bumps to 1.0.0 only on James's final word.
+   2. Status: plan approved 2026-08-28; round 1 (deep code review + security pass) in progress.
