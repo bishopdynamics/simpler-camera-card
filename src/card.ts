@@ -514,7 +514,13 @@ export class SimplerCameraCard extends LitElement {
   };
 
   private readonly _onPageResumed = (): void => {
-    this._snapshot?.resume();
+    // Hidden always wins. A network that came back under a hidden tab is no
+    // reason to un-pause a poll loop nobody is looking at — nothing would
+    // re-pause it until the next visibility transition, so one `online` while
+    // hidden costs a signed snapshot every interval for as long as that lasts.
+    // The live path needs no guard here: the supervisor applies the same rule
+    // internally (`handleConnectivityEvent` ignores a suspended stream).
+    if (document.visibilityState !== 'hidden') this._snapshot?.resume();
     this._supervisor?.notifyExternalEvent('page-resumed');
   };
 
@@ -543,13 +549,28 @@ export class SimplerCameraCard extends LitElement {
     if (!this.isConnected || !this._config || !this._hass) return;
 
     this._startScheduled = true;
-    void this.updateComplete.then(() => {
-      this._startScheduled = false;
-      if (this._supervisor || this._snapshot) return;
-      if (!this.isConnected || !this._config || !this._hass) return;
-      if (this._effectiveMode === 'snapshot') this._startSnapshotLoop(this._config);
-      else this._startSupervisor(this._config);
-    });
+    // *Both* arms clear the guard. An update cycle that rejects — anything
+    // throwing inside a render, from any card on the dashboard's shared
+    // pipeline — would otherwise latch it true for good, and every later
+    // `_maybeStart()` would return at the line above: a card stuck on "Not
+    // connected" until the page is reloaded.
+    void this.updateComplete.then(
+      () => {
+        this._startScheduled = false;
+        if (this._supervisor || this._snapshot) return;
+        if (!this.isConnected || !this._config || !this._hass) return;
+        if (this._effectiveMode === 'snapshot') this._startSnapshotLoop(this._config);
+        else this._startSupervisor(this._config);
+      },
+      (error: unknown) => {
+        // The render that would have put the `<video>` in the document failed,
+        // so *this* start is abandoned rather than run against a half-built
+        // DOM. Home Assistant hands over a new `hass` object constantly, and
+        // every one of those calls `_maybeStart()` again.
+        this._startScheduled = false;
+        console.info(`${LOG_PREFIX} update failed before start:`, error);
+      },
+    );
   }
 
   /**
@@ -572,12 +593,39 @@ export class SimplerCameraCard extends LitElement {
       endpoint: endpointResolver,
       getHass: () => this._hass,
       getVideo: () => this._video,
-      getConfig: () => this._config ?? config,
+      getConfig: () => this._supervisorConfig(config),
       ...this.supervisorOverrides,
     });
     supervisor.onStateChange = (state, detail) => this._onStreamState(state, detail);
     this._supervisor = supervisor;
     supervisor.start();
+    // A supervisor built while the dashboard is hidden must not stream. The
+    // `visibilitychange` that would have told it fired before it existed, and
+    // it ignores the *next* `visibility-visible` because it was never
+    // suspended — so without this a background tab holds a websocket open and
+    // decodes video for the whole hidden period. Reporting the fact hands it
+    // the ordinary hidden path: grace period, then teardown.
+    if (document.visibilityState === 'hidden') {
+      supervisor.notifyExternalEvent('visibility-hidden');
+    }
+  }
+
+  /**
+   * The config the supervisor reads — the card's own, except for one field.
+   *
+   * Inside a `tap_to_live` window `reload_after_minutes_down` is forced to 0,
+   * because the escape hatch reloads the *entire dashboard* and a temporary
+   * live window is something a finger started, not something the dashboard
+   * asked for. Left armed, a single tap on a camera whose stream is down
+   * reloads every card on the page once the deadline passes — and the deadline
+   * lands inside the window easily, since `live_duration` has no upper bound in
+   * YAML (the 60 s cap belongs to the visual editor's slider). A permanent
+   * `mode: live` card is untouched and keeps the hatch exactly as configured.
+   */
+  private _supervisorConfig(fallback: NormalizedCardConfig): NormalizedCardConfig {
+    const config = this._config ?? fallback;
+    if (!this._temporaryLive) return config;
+    return { ...config, reload_after_minutes_down: 0 };
   }
 
   private _stopSupervisor(): void {
@@ -638,6 +686,10 @@ export class SimplerCameraCard extends LitElement {
    * its flag and both its timers without knowing the feature exists.
    */
   private _stopEverything(): void {
+    // A teardown is a clean slate: a start that was scheduled against the old
+    // engine must not leave the guard set behind it. The caller re-arms with
+    // `_maybeStart()` where it means to start something.
+    this._startScheduled = false;
     this._clearLiveWindow();
     this._stopSupervisor();
     this._stopSnapshotLoop();

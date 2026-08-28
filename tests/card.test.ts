@@ -743,6 +743,77 @@ describe('SimplerCameraCard — lifecycle plumbing', () => {
     expect(players).toHaveLength(2);
   });
 
+  it('never streams when the dashboard is already hidden at start', async () => {
+    // The supervisor is built *after* the `visibilitychange` that hid the tab,
+    // so nothing but the card can tell it what state the page is in.
+    vi.useFakeTimers();
+    const visibility = { value: 'hidden' };
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => visibility.value,
+    });
+    try {
+      const { players, create } = playerFactory();
+      const card = mountCard(base, { createPlayer: create, endpoint: stubEndpoint() });
+      await settle(card);
+
+      await vi.advanceTimersByTimeAsync(HIDDEN_TEARDOWN_GRACE_MS);
+      await settle(card);
+      expect(players[0].destroyed).toBe(true);
+      expect(statusText(card)).toBe('Paused while the dashboard is hidden.');
+
+      visibility.value = 'visible';
+      document.dispatchEvent(new Event('visibilitychange'));
+      await settle(card);
+      expect(players).toHaveLength(2);
+    } finally {
+      delete (document as unknown as Record<string, unknown>).visibilityState;
+    }
+  });
+
+  it('keeps the reload escape hatch on a permanent live card', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    const reloadPage = vi.fn();
+    const card = mountCard(
+      { ...base, reload_after_minutes_down: 1 },
+      { endpoint: neverResolves(), reloadPage },
+    );
+    await settle(card);
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    expect(reloadPage).toHaveBeenCalledTimes(1);
+  });
+
+  it('recovers from a rejected update instead of latching the start guard', async () => {
+    const { players, create } = playerFactory();
+    const card = document.createElement(CARD_TAG);
+    card.supervisorOverrides = { createPlayer: create, endpoint: stubEndpoint() };
+    card.setConfig(base);
+    document.body.appendChild(card);
+    await settle(card);
+    expect(players).toHaveLength(0);
+
+    // One update cycle rejects while a start is pending — anything throwing
+    // inside a render does this. The test owns the only other handle on the
+    // rejection, so an unfixed card cannot poison the run.
+    const rejected = Promise.reject(new Error('render blew up'));
+    rejected.catch(() => {});
+    Object.defineProperty(card, 'updateComplete', { configurable: true, get: () => rejected });
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+    card.hass = fakeHass(posterEntity);
+    await rejected.catch(() => {});
+    await Promise.resolve();
+    delete (card as unknown as Record<string, unknown>).updateComplete;
+    info.mockRestore();
+
+    // That start was abandoned, as it must be — but the card is not dead.
+    expect(players).toHaveLength(0);
+    card.hass = fakeHass(posterEntity);
+    await settle(card);
+    expect(players).toHaveLength(1);
+  });
+
   it('drops its listeners when disconnected', async () => {
     vi.useFakeTimers();
     const { players, create } = playerFactory();
@@ -1078,6 +1149,44 @@ describe('SimplerCameraCard — snapshot mode', () => {
       await settle(card);
       expect(poster.calls()).toBe(2);
       expect(snapshotSrc(card)).toContain('sig=1');
+    } finally {
+      delete (document as unknown as Record<string, unknown>).visibilityState;
+    }
+  });
+
+  it('stays paused when online/pageshow fire under a hidden dashboard', async () => {
+    vi.useFakeTimers();
+    installImageStub();
+    const poster = countingPoster();
+    const visibility = { value: 'visible' };
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => visibility.value,
+    });
+    try {
+      const card = mountCard(snapshotBase, {
+        endpoint: stubEndpoint({ resolvePosterUrl: poster.resolvePosterUrl }),
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      await settle(card);
+      expect(poster.calls()).toBe(1);
+
+      visibility.value = 'hidden';
+      document.dispatchEvent(new Event('visibilitychange'));
+      await vi.advanceTimersByTimeAsync(0);
+
+      // Wi-Fi flaps under a tab nobody is looking at: neither event may
+      // un-pause the loop for the rest of the hidden period.
+      window.dispatchEvent(new Event('online'));
+      window.dispatchEvent(new Event('pageshow'));
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(poster.calls()).toBe(1);
+
+      visibility.value = 'visible';
+      document.dispatchEvent(new Event('visibilitychange'));
+      await vi.advanceTimersByTimeAsync(0);
+      await settle(card);
+      expect(poster.calls()).toBe(2);
     } finally {
       delete (document as unknown as Record<string, unknown>).visibilityState;
     }
@@ -1424,6 +1533,45 @@ describe('SimplerCameraCard — tap to go live', () => {
     expect(fired.map((detail) => detail.action)).toEqual(['hold', 'double_tap']);
     // Neither gesture went live.
     expect(players).toHaveLength(0);
+  });
+
+  it('never arms the reload escape hatch inside the window', async () => {
+    // A tap must not be able to reload a whole dashboard. `live_duration` has
+    // no upper bound in YAML (the 60 s slider cap belongs to the editor), so a
+    // window can easily outlive `reload_after_minutes_down`.
+    vi.useFakeTimers();
+    installImageStub();
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    const reloadPage = vi.fn();
+    const card = mountCard(
+      { ...tapLiveBase, live_duration: 120, reload_after_minutes_down: 1 },
+      {
+        createPlayer: playerFactory().create,
+        endpoint: stubEndpoint({
+          resolvePosterUrl: countingPoster().resolvePosterUrl,
+          // The stream is dead: the supervisor never leaves `connecting`, so
+          // the escape hatch's deadline is reached with nothing to stop it.
+          resolveSignedWsUrl: () => new Promise<string>(() => {}),
+        }),
+        reloadPage,
+      },
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    await settle(card);
+
+    await tapAndSettle(card);
+    expect(card.shadowRoot!.querySelector('video')).not.toBeNull();
+
+    await vi.advanceTimersByTimeAsync(61_000);
+    await settle(card);
+    expect(reloadPage).not.toHaveBeenCalled();
+    // …and the window is still the thing in charge of ending itself.
+    expect(card.shadowRoot!.querySelector('video')).not.toBeNull();
+
+    await vi.advanceTimersByTimeAsync(60_000);
+    await settle(card);
+    expect(reloadPage).not.toHaveBeenCalled();
+    expect(card.shadowRoot!.querySelector('video')).toBeNull();
   });
 
   it('tears the window down on setConfig, timers and all', async () => {
