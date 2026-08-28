@@ -1120,7 +1120,11 @@ describe('SimplerCameraCard — poster', () => {
 
   it('still renders a relative entity_picture as before', async () => {
     const { create } = playerFactory();
-    const card = mountCard(base, { createPlayer: create, endpoint: neverResolves() }, fakeHass(posterEntity));
+    const card = mountCard(
+      base,
+      { createPlayer: create, endpoint: neverResolves() },
+      fakeHass(posterEntity),
+    );
     await settle(card);
 
     expect(card.shadowRoot!.querySelector('img.poster')?.getAttribute('src')).toContain(

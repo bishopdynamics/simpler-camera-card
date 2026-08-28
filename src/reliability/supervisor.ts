@@ -43,6 +43,7 @@
  * production-correct default.
  */
 
+import { describeError } from '../errors';
 import {
   HIDDEN_TEARDOWN_GRACE_MS,
   TIER1_MAX_RETRIES,
@@ -539,14 +540,4 @@ export class StreamSupervisorImpl implements StreamSupervisor {
     this.currentState = state;
     this.onStateChange(state, detail);
   }
-}
-
-/** Best-effort human-readable text for anything that was thrown or rejected. */
-function describeError(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  if (typeof error === 'string') return error;
-  if (error && typeof error === 'object' && 'message' in error) {
-    return String((error as { message: unknown }).message);
-  }
-  return String(error);
 }

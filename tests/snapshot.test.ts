@@ -8,13 +8,10 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EndpointError } from '../src/endpoint';
-import {
-  SNAPSHOT_TICK_TIMEOUT_FLOOR_MS,
-  SnapshotLoop,
-  type SnapshotLoopDeps,
-} from '../src/snapshot';
+import { SnapshotLoop, type SnapshotLoopDeps } from '../src/snapshot';
 import {
   SNAPSHOT_STALE_AFTER_FAILURES,
+  SNAPSHOT_TICK_TIMEOUT_FLOOR_MS,
   type EndpointResolver,
   type HomeAssistant,
   type NormalizedCardConfig,
@@ -595,6 +592,52 @@ describe('SnapshotLoop — pause, resume and refreshNow', () => {
     h.loop.refreshNow();
     await flush();
     expect(h.frames).toHaveLength(3);
+  });
+
+  it('refreshNow polls at once even while a tick is hung', async () => {
+    vi.useFakeTimers();
+    const h = harness({ config: { refresh_interval: 10 } });
+    // A poll the proxy accepted and will never answer — the exact state a
+    // reconnect finds the loop in, since the blip is what wedged it.
+    h.setImageBehaviour('hold');
+
+    h.loop.start();
+    await flush();
+    expect(h.resolveCalls()).toBe(1);
+
+    // `hass.connected` goes false→true: the card asks for a frame *now*, and
+    // must not be told to wait out the hung tick's deadline for one.
+    h.setImageBehaviour('load');
+    h.loop.refreshNow();
+    await flush();
+    expect(h.resolveCalls()).toBe(2);
+    expect(h.frames).toEqual(['/api/camera_proxy/front?sig=2']);
+  });
+
+  it('drops the hung tick’s late result after a refreshNow', async () => {
+    vi.useFakeTimers();
+    const h = harness({ config: { refresh_interval: 10 } });
+    h.setImageBehaviour('hold');
+
+    h.loop.start();
+    await flush();
+
+    h.setImageBehaviour('load');
+    h.loop.refreshNow();
+    await flush();
+    expect(h.frames).toEqual(['/api/camera_proxy/front?sig=2']);
+
+    // The pre-reconnect preload finally decodes. Its URL was signed against the
+    // old session and it lost the race anyway: it must not be published, and it
+    // must not disturb the tick that replaced it.
+    h.images[0].finishLoad();
+    await flush();
+    expect(h.frames).toEqual(['/api/camera_proxy/front?sig=2']);
+    expect(h.loop.consecutiveFailures).toBe(0);
+
+    // The interval restarted at the refresh and is still healthy.
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(h.frames).toHaveLength(2);
   });
 
   it('does nothing before start()', async () => {

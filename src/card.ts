@@ -36,6 +36,7 @@ import { state } from 'lit/decorators.js';
 import { ActionController, isInteractive } from './actions';
 import { buildConfigForm, type ConfigForm } from './editor';
 import { endpointResolver } from './endpoint';
+import { describeError } from './errors';
 import { MsePlayer } from './player/mse-player';
 import { StreamSupervisorImpl, type StreamSupervisorDeps } from './reliability/supervisor';
 import { SnapshotLoop } from './snapshot';
@@ -1124,16 +1125,6 @@ function sameOriginPosterFallback(entity: CameraEntity | undefined): string | un
   // `[^/\\]` and not just `[^/]`: browsers fold `\` into `/` when resolving
   // URLs, so `/\evil.com/x` is protocol-relative too.
   return typeof picture === 'string' && /^\/[^/\\]/.test(picture) ? picture : undefined;
-}
-
-/** Best-effort human-readable text for anything that was thrown or rejected. */
-function describeError(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  if (typeof error === 'string') return error;
-  if (error && typeof error === 'object' && 'message' in error) {
-    return String((error as { message: unknown }).message);
-  }
-  return String(error);
 }
 
 /** `" in 8 s"` for a known delay, `""` otherwise. */

@@ -247,8 +247,8 @@ const HELPERS: Record<string, string> = {
     'How long the temporary live window stays up after a tap, before automatically reverting ' +
     'to snapshots. 5–60 seconds here; YAML also accepts fractional values above the minimum.',
   reload_after_minutes_down:
-    'Last resort: reload the whole page after this many consecutive minutes down. ' +
-    '0 disables it.',
+    'Only applies in Live stream mode: last resort, reload the whole page after this many ' +
+    'consecutive minutes down. 0 disables it. Suspended while a tap-to-live window is up.',
   interactions: 'What tapping, holding and double-tapping the card do.',
   advanced:
     'Sub-stream selection, snapshot refresh interval, aspect ratio and the last-resort page reload.',

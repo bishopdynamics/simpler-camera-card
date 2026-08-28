@@ -114,7 +114,7 @@ reload_after_minutes_down: 30     # last-resort page reload
 | `hold_action` | action object | `{ action: none }` | Press and hold for 500 ms. |
 | `double_tap_action` | action object | `{ action: none }` | Two taps within 250 ms. |
 | `aspect_ratio` | `"W:H"` or number | `16:9` | Accepts `"16:9"`, `"16/9"` or a bare number such as `1.78`. The video is letterboxed inside it (`object-fit: contain`). |
-| `reload_after_minutes_down` | number (minutes) | `0` (off) | Escape hatch: reload the whole page after this many consecutive minutes down. |
+| `reload_after_minutes_down` | number (minutes) | `0` (off) | Escape hatch: reload the whole page after this many consecutive minutes down. Only meaningful under `mode: live`; snapshot polling has no connection to lose, and it is suspended for the duration of a `tap_to_live` window. |
 | `mode` | `live` \| `snapshot` | `live` | `live` decodes the MSE stream continuously; `snapshot` polls a still image instead. See [Snapshot mode](#snapshot-mode). |
 | `refresh_interval` | number (seconds) | `5` | How often a new still is fetched. Only meaningful under `mode: snapshot`; minimum `1`, fractional values allowed. |
 | `tap_to_live` | boolean | `false` | Only meaningful under `mode: snapshot`. When `true`, tapping the card temporarily switches it to the real live stream instead of firing `tap_action`. See [Tap to go live](#tap-to-go-live). |
@@ -204,9 +204,10 @@ live_duration: 30
 
 You do not have to configure any of this; it is what the card does.
 
-1. **Watchdog.** Every frame the browser actually presents re-arms a 10-second timer. If the timer
-   fires while playback is expected (tab visible, not paused), the stream is declared dead — no matter
-   what the socket or the peer connection claim. This is what catches the frozen-but-connected case.
+1. **Watchdog.** Every frame the browser actually presents holds open a 10-second window. If ten
+   seconds pass with no frame while playback is expected (tab visible, not paused), the stream is
+   declared dead — no matter what the socket claims. This is what catches the frozen-but-connected
+   case.
 2. **Tier 1 — fast retry.** Up to 3 in-place retries, 2 seconds apart.
 3. **Tier 2 — remount.** The entire player is thrown away and rebuilt, on exponential backoff: 5 s,
    doubling, capped at 10 minutes, each delay randomly shortened by up to half so that several cards
@@ -218,7 +219,9 @@ You do not have to configure any of this; it is what the card does.
    visible again.
 6. **`reload_after_minutes_down`** is the last resort: if the stream has been continuously down for
    that many minutes, the card reloads the page. Off by default, and never needed in normal operation —
-   it exists for the failure nobody has characterised yet.
+   it exists for the failure nobody has characterised yet. It belongs to the live stream: a
+   `mode: snapshot` card never arms it, and a `tap_to_live` window suspends it, so a tap can never
+   reload the dashboard out from under you.
 
 ## Troubleshooting
 

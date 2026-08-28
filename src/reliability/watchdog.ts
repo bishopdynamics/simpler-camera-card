@@ -75,6 +75,11 @@ export interface WatchdogOptions {
   pollIntervalMs?: number;
   /** Injectable timers; defaults to the real ones (resolved per call). */
   timers?: TimerApi;
+  /**
+   * Monotonic-enough clock in milliseconds. Defaults to `Date.now`, read per
+   * call so `vi.useFakeTimers()` (which fakes `Date` too) drives it.
+   */
+  now?: () => number;
 }
 
 /** `requestVideoFrameCallback` bound to an element, or `null` where unsupported. */
@@ -109,6 +114,7 @@ export class FrameStallWatchdog implements StallWatchdog {
   private readonly timeoutMs: number;
   private readonly pollIntervalMs: number;
   private readonly timers: TimerApi;
+  private readonly now: () => number;
 
   private video: HTMLVideoElement | null = null;
   private armedFlag = false;
@@ -120,6 +126,16 @@ export class FrameStallWatchdog implements StallWatchdog {
   private frames: ReturnType<typeof frameCallbackApi> = null;
   private frameHandle: number | null = null;
   private lastCurrentTime = 0;
+
+  /**
+   * When the last sign of life arrived (or when observation started).
+   *
+   * This — not a re-armed timer — is what a presented frame updates, which is
+   * the whole point: frames arrive ~30 times a second per camera, all day, and
+   * a `clearTimeout`/`setTimeout` pair on each one is pure churn. See
+   * {@link armStallTimer} for the timer that chases it.
+   */
+  private lastProgressAt = 0;
   private readonly onProgressEvent = () => this.checkProgress();
 
   constructor(options: WatchdogOptions) {
@@ -128,6 +144,7 @@ export class FrameStallWatchdog implements StallWatchdog {
     this.timeoutMs = options.timeoutMs ?? WATCHDOG_STALL_TIMEOUT_MS;
     this.pollIntervalMs = options.pollIntervalMs ?? WATCHDOG_POLL_INTERVAL_MS;
     this.timers = options.timers ?? defaultTimers;
+    this.now = options.now ?? ((): number => Date.now());
   }
 
   /** Whether the watchdog is currently watching for stalls. */
@@ -194,7 +211,8 @@ export class FrameStallWatchdog implements StallWatchdog {
     if (!video || !this.armedFlag || this.destroyed) return;
 
     this.lastCurrentTime = video.currentTime;
-    this.armStallTimer();
+    this.noteProgress();
+    this.armStallTimer(this.timeoutMs);
 
     this.frames = frameCallbackApi(video);
     if (this.frames) {
@@ -233,11 +251,18 @@ export class FrameStallWatchdog implements StallWatchdog {
     });
   }
 
-  /** A frame reached the screen: the stream is demonstrably alive. */
+  /**
+   * A frame reached the screen: the stream is demonstrably alive.
+   *
+   * Deliberately as cheap as it looks — one clock read and two field writes.
+   * This runs once per presented frame (~30 Hz per camera, forever), so it must
+   * not touch a timer; {@link onStallTimeout} does the arithmetic instead, at
+   * most once per stall window.
+   */
   private onFramePresented(): void {
     if (!this.armedFlag || this.stalledFlag || this.destroyed) return;
     if (this.video) this.lastCurrentTime = this.video.currentTime;
-    this.armStallTimer();
+    this.noteProgress();
     this.requestFrame();
   }
 
@@ -247,24 +272,53 @@ export class FrameStallWatchdog implements StallWatchdog {
     if (!video || !this.armedFlag || this.stalledFlag || this.destroyed) return;
     if (video.currentTime !== this.lastCurrentTime) {
       this.lastCurrentTime = video.currentTime;
-      this.armStallTimer();
+      this.noteProgress();
     }
   }
 
-  private armStallTimer(): void {
+  /** Record a sign of life. The only thing the per-frame path writes. */
+  private noteProgress(): void {
+    this.lastProgressAt = this.now();
+  }
+
+  private armStallTimer(delayMs: number): void {
     if (this.stallHandle !== null) {
       this.timers.clearTimeout(this.stallHandle);
     }
-    this.stallHandle = this.timers.setTimeout(() => this.onStallTimeout(), this.timeoutMs);
+    this.stallHandle = this.timers.setTimeout(() => this.onStallTimeout(), delayMs);
   }
 
+  /**
+   * The deadline came round: is it really a stall?
+   *
+   * The timer chases {@link lastProgressAt} rather than being reset by it. If
+   * frames have arrived since it was armed it simply re-arms itself for the
+   * remainder of *their* window, which keeps the verdict landing at exactly
+   * `timeoutMs` after the last frame — the same instant the old re-arm-per-frame
+   * version convicted at — while costing one timer per window instead of one
+   * per frame.
+   */
   private onStallTimeout(): void {
     this.stallHandle = null;
     if (!this.armedFlag || this.stalledFlag || this.destroyed) return;
 
+    let sinceProgress = this.now() - this.lastProgressAt;
+    if (sinceProgress < 0) {
+      // `Date.now()` is wall-clock, not monotonic: an NTP correction or a
+      // resumed laptop can step it backwards. Start a fresh window from here
+      // rather than going blind until the clock catches up.
+      this.noteProgress();
+      sinceProgress = 0;
+    }
+    if (sinceProgress < this.timeoutMs) {
+      // A frame landed after this timer was armed: the window has moved.
+      this.armStallTimer(this.timeoutMs - sinceProgress);
+      return;
+    }
+
     if (!this.playbackIsExpected()) {
       // Not a stall: nobody expected a frame. Keep waiting, silently.
-      this.armStallTimer();
+      this.armStallTimer(this.timeoutMs);
       return;
     }
 

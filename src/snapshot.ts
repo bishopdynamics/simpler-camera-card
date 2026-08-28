@@ -29,7 +29,10 @@
  *   a proxy accepts and never answers costs one poll, not the whole loop.
  * - **Abandoned work is silent.** `pause()` and `destroy()` invalidate the tick
  *   in flight; its callbacks become no-ops rather than delivering a frame the
- *   card no longer wants.
+ *   card no longer wants. So does every restart (`resume()`, `refreshNow()`):
+ *   those promise a poll *now*, which means the tick still in flight — signed
+ *   against the world before the reconnect — is retired rather than allowed to
+ *   hold the overlap guard against the fresh one.
  *
  * ## Wiring
  *
@@ -47,9 +50,11 @@
  */
 
 import { EndpointError } from './endpoint';
+import { describeError } from './errors';
 import { defaultTimers, type TimerApi, type TimerHandle } from './reliability/retry';
 import {
   SNAPSHOT_STALE_AFTER_FAILURES,
+  SNAPSHOT_TICK_TIMEOUT_FLOOR_MS,
   type EndpointResolver,
   type HomeAssistant,
   type NormalizedCardConfig,
@@ -57,18 +62,6 @@ import {
 
 /** Prefix on every console line, so field logs are greppable. */
 const LOG_PREFIX = '[simpler-camera-card]';
-
-/**
- * Floor under a tick's deadline, in milliseconds.
- *
- * The deadline is one `refresh_interval` — a poll that has not finished by the
- * time the next one is due is late by definition — but a one-second refresh
- * must not start abandoning healthy-but-slow polls, so ten seconds is the least
- * a tick ever gets. That is comfortably longer than a signature round-trip plus
- * a snapshot fetch over a bad link, and short enough that the stale indicator
- * still means something.
- */
-export const SNAPSHOT_TICK_TIMEOUT_FLOOR_MS = 10_000;
 
 /** The logging surface used; injectable so tests can assert on it quietly. */
 export interface SnapshotLogger {
@@ -237,6 +230,12 @@ export class SnapshotLoop {
   /** (Re-)arm the interval and poll immediately. */
   private restart(): void {
     this.cancelTimer();
+    // The tick in flight, if any, belongs to the world *before* this restart —
+    // a pre-reconnect `hass`, a signature minted against the old session, or a
+    // request that may never answer at all. Retire it, both so its late result
+    // cannot be published and so the overlap guard below does not swallow the
+    // immediate poll that `resume()` and `refreshNow()` promise.
+    this.invalidate();
     const intervalMs = Math.max(0, this.deps.getConfig().refresh_interval) * 1000;
     this.timer = this.timers.setInterval(() => void this.tick(), intervalMs);
     void this.tick();
@@ -380,10 +379,11 @@ export class SnapshotLoop {
   /**
    * Retire the tick in flight: its result is no longer wanted.
    *
-   * The guard and the deadline go with it. Freeing the guard here matters for
-   * `pause()`: when the abandoned tick is stuck somewhere it cannot be woken
-   * from — a websocket command that never answers — nothing else would ever
-   * release it, and `resume()` would find the loop wedged.
+   * The guard and the deadline go with it. Freeing the guard here is what makes
+   * `pause()` and `restart()` safe: when the abandoned tick is stuck somewhere
+   * it cannot be woken from — a websocket command that never answers — nothing
+   * else would ever release it, so `resume()` would find the loop wedged and
+   * `refreshNow()` would silently do nothing.
    */
   private invalidate(): void {
     this.generation += 1;
@@ -397,14 +397,4 @@ export class SnapshotLoop {
   private isCurrent(generation: number): boolean {
     return this.started && !this.destroyed && !this.paused && generation === this.generation;
   }
-}
-
-/** Best-effort human-readable text for anything that was thrown or rejected. */
-function describeError(error: unknown): string {
-  if (error instanceof Error) return error.message;
-  if (typeof error === 'string') return error;
-  if (error && typeof error === 'object' && 'message' in error) {
-    return String((error as { message: unknown }).message);
-  }
-  return String(error);
 }

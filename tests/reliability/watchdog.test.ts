@@ -4,6 +4,7 @@ import {
   WATCHDOG_POLL_INTERVAL_MS,
   type WatchdogOptions,
 } from '../../src/reliability/watchdog';
+import type { TimerApi } from '../../src/reliability/retry';
 import { WATCHDOG_STALL_TIMEOUT_MS } from '../../src/types';
 import { PollingFakeVideo, RvfcFakeVideo } from './doubles';
 
@@ -31,7 +32,7 @@ describe('FrameStallWatchdog (requestVideoFrameCallback path)', () => {
     expect(video.pendingFrameCallbacks).toBe(1);
   });
 
-  it('re-arms the stall timer on every presented frame', () => {
+  it('keeps the window open on every presented frame', () => {
     const { onStall, video } = armed();
 
     // A frame every 4 s keeps the 10 s window open indefinitely.
@@ -41,6 +42,33 @@ describe('FrameStallWatchdog (requestVideoFrameCallback path)', () => {
     }
 
     expect(onStall).not.toHaveBeenCalled();
+  });
+
+  it('does not touch a timer per presented frame', () => {
+    // ~30 frames a second per camera, all day: the frame path must be a clock
+    // read and nothing else. The stall timer chases the last-frame timestamp
+    // instead, so it re-arms roughly once per 10 s window, not once per frame.
+    let armCount = 0;
+    const counting: TimerApi = {
+      setTimeout: (handler, ms) => {
+        armCount += 1;
+        return globalThis.setTimeout(handler, ms);
+      },
+      clearTimeout: (handle) => globalThis.clearTimeout(handle),
+      setInterval: (handler, ms) => globalThis.setInterval(handler, ms),
+      clearInterval: (handle) => globalThis.clearInterval(handle),
+    };
+    const { onStall, video } = armed({ timers: counting });
+
+    // ~60 s of healthy playback at ~30 fps: 1 800 frames.
+    for (let i = 0; i < 1_800; i += 1) {
+      vi.advanceTimersByTime(33);
+      video.presentFrame();
+    }
+
+    expect(onStall).not.toHaveBeenCalled();
+    // One arm at startObserving plus one per elapsed window — never per frame.
+    expect(armCount).toBeLessThanOrEqual(10);
   });
 
   it('fires after the stall timeout with no frames', () => {

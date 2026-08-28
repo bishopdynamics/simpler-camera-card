@@ -203,8 +203,9 @@ describe('config form schema', () => {
   });
 
   it('offers exactly the display modes validation accepts', () => {
-    const options = (field('mode').selector.select as { options: { value: string; label: string }[] })
-      .options;
+    const options = (
+      field('mode').selector.select as { options: { value: string; label: string }[] }
+    ).options;
     expect(options.map((o) => o.value)).toEqual([...VIEW_MODES]);
     expect((field('mode').selector.select as { mode: string }).mode).toBe('dropdown');
     for (const option of options) expect(option.label).not.toBe('');

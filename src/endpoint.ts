@@ -17,6 +17,7 @@
  * Implements {@link EndpointResolver}.
  */
 
+import { describeError } from './errors';
 import type {
   CameraEntity,
   EndpointErrorCode,
@@ -301,12 +302,3 @@ export const endpointResolver: EndpointResolver = {
   resolveSignedWsUrl,
   resolvePosterUrl,
 };
-
-function describeError(cause: unknown): string {
-  if (cause instanceof Error) return cause.message;
-  if (typeof cause === 'string') return cause;
-  if (cause && typeof cause === 'object' && 'message' in cause) {
-    return String((cause as { message: unknown }).message);
-  }
-  return String(cause);
-}

@@ -242,9 +242,9 @@ describe('signPath', () => {
 
   it('still resolves a normal same-origin signed path', async () => {
     const hass = fakeHass();
-    await expect(signPath(hass, '/api/frigate/frigate/go2rtc/ws/api/ws?src=front_yard')).resolves.toBe(
-      '/api/frigate/frigate/go2rtc/ws/api/ws?src=front_yard&authSig=sig-1',
-    );
+    await expect(
+      signPath(hass, '/api/frigate/frigate/go2rtc/ws/api/ws?src=front_yard'),
+    ).resolves.toBe('/api/frigate/frigate/go2rtc/ws/api/ws?src=front_yard&authSig=sig-1');
   });
 });
 

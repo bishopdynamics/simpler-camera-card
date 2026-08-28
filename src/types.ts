@@ -230,6 +230,13 @@ export interface SimplerCameraCardConfig {
   /**
    * Escape hatch: `location.reload()` after N consecutive minutes down.
    * `0` (default) disables it.
+   *
+   * Only meaningful under `mode: live` — the deadline is owned by the stream
+   * supervisor, and `mode: snapshot` never builds one. A snapshot loop has
+   * nothing to escape from: it has no connection to lose, and a failed poll
+   * costs one interval rather than accumulating downtime. It is also forced to
+   * `0` for the duration of a {@link tap_to_live} window, where the card is
+   * live only because a finger asked it to be (see `card.ts`).
    */
   reload_after_minutes_down?: number;
   /** Live stream or polled stills. Default `live`. */
@@ -522,6 +529,18 @@ export const POSTER_REFRESH_INTERVAL_MS = 10_000;
  * Consumed by: `snapshot.ts` / `card.ts` (a later slice) and their tests.
  */
 export const SNAPSHOT_STALE_AFTER_FAILURES = 3;
+
+/**
+ * Snapshot mode: floor under a tick's deadline, in milliseconds.
+ *
+ * The deadline is one `refresh_interval` — a poll that has not finished by the
+ * time the next one is due is late by definition — but a one-second refresh
+ * must not start abandoning healthy-but-slow polls, so ten seconds is the least
+ * a tick ever gets. That is comfortably longer than a signature round-trip plus
+ * a snapshot fetch over a bad link, and short enough that the stale indicator
+ * still means something.
+ */
+export const SNAPSHOT_TICK_TIMEOUT_FLOOR_MS = 10_000;
 
 /**
  * Tap-to-go-live: minimum allowed `live_duration`, in seconds. Used by config
