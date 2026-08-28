@@ -66,11 +66,31 @@ const LOG_PREFIX = '[simpler-camera-card]';
 /* Config validation                                                           */
 /* -------------------------------------------------------------------------- */
 
-/** Thrown by {@link normalizeConfig}; Lovelace renders `message` to the user. */
-class ConfigError extends Error {
-  constructor(message: string) {
+/**
+ * Thrown by {@link normalizeConfig}; Lovelace renders `message` to the user.
+ *
+ * `transient` splits the failures into two kinds, and *only* the visual editor
+ * cares about the difference (`setConfig` rejects both, identically):
+ *
+ * - **transient** — the value has the right shape for its form widget but is
+ *   momentarily invalid, which is exactly the state a user types *through*:
+ *   `refresh_interval: 0` on the way to `0.5`, `aspect_ratio: "16:"` on the way
+ *   to `"16:9"`, `overlay: custom` before its text is entered, an empty camera
+ *   picker. The form can hold the value and the user is about to fix it.
+ * - **structural** (the default) — a value no form widget can produce or
+ *   faithfully round-trip: an unknown enum, a wrong-typed field, a malformed
+ *   action object. Such a config *should* drop the user to the YAML editor.
+ *
+ * See `editor.ts`'s `assertConfig`, which is the only consumer of the flag.
+ */
+export class ConfigError extends Error {
+  /** See the class doc: `true` for form-representable, momentarily-bad values. */
+  readonly transient: boolean;
+
+  constructor(message: string, transient = false) {
     super(message);
     this.name = 'ConfigError';
+    this.transient = transient;
   }
 }
 
@@ -115,7 +135,8 @@ function validateAspectRatio(value: unknown): string {
 
   if (typeof value === 'number') {
     if (!Number.isFinite(value) || value <= 0) {
-      throw new ConfigError(`"aspect_ratio" must be a positive number (got ${value}).`);
+      // Right type, bad value — the text field can hold it while it is fixed.
+      throw new ConfigError(`"aspect_ratio" must be a positive number (got ${value}).`, true);
     }
     return String(value);
   }
@@ -134,6 +155,9 @@ function validateAspectRatio(value: unknown): string {
   throw new ConfigError(
     `"aspect_ratio" must look like "16:9" or be a positive number ` +
       `(got ${JSON.stringify(value)}).`,
+    // A string is what the text field emits, and every prefix of "16:9" spends
+    // a keystroke or two unparseable. Any other type came from YAML.
+    typeof value === 'string',
   );
 }
 
@@ -156,7 +180,9 @@ export function normalizeConfig(raw: unknown): NormalizedCardConfig {
 
   const camera = raw.camera;
   if (camera === undefined || camera === null || camera === '') {
-    throw new ConfigError('"camera" is required, e.g. camera: camera.front_yard.');
+    // An empty picker is where every new card starts; the preview shows its own
+    // error meanwhile, so there is nothing to gain from ejecting to YAML.
+    throw new ConfigError('"camera" is required, e.g. camera: camera.front_yard.', true);
   }
   if (typeof camera !== 'string' || !ENTITY_ID_RE.test(camera)) {
     throw new ConfigError(
@@ -171,6 +197,9 @@ export function normalizeConfig(raw: unknown): NormalizedCardConfig {
     throw new ConfigError(
       `"stream" must be a non-empty go2rtc stream name, e.g. front_yard_sub ` +
         `(got ${JSON.stringify(raw.stream)}).`,
+      // An emptied text box on its way to a new name is the transient case; a
+      // non-string is structural.
+      typeof raw.stream === 'string',
     );
   }
 
@@ -185,7 +214,8 @@ export function normalizeConfig(raw: unknown): NormalizedCardConfig {
     throw new ConfigError('"overlay_text" must be a string.');
   }
   if (overlay === 'custom' && (raw.overlay_text === undefined || raw.overlay_text === '')) {
-    throw new ConfigError('"overlay: custom" requires "overlay_text" to be set.');
+    // Picking "Custom text" necessarily precedes typing it.
+    throw new ConfigError('"overlay: custom" requires "overlay_text" to be set.', true);
   }
 
   const mode = raw.mode ?? CONFIG_DEFAULTS.mode;
@@ -204,6 +234,9 @@ export function normalizeConfig(raw: unknown): NormalizedCardConfig {
     throw new ConfigError(
       `"refresh_interval" must be a number of seconds >= 1 ` +
         `(got ${JSON.stringify(raw.refresh_interval)}).`,
+      // The number box emits a number per keystroke, so "0.5" is preceded by 0.
+      // A non-number never came from that widget.
+      typeof refreshInterval === 'number',
     );
   }
 
@@ -212,6 +245,7 @@ export function normalizeConfig(raw: unknown): NormalizedCardConfig {
     throw new ConfigError(
       `"reload_after_minutes_down" must be a number of minutes >= 0, or 0 to disable ` +
         `(got ${JSON.stringify(raw.reload_after_minutes_down)}).`,
+      typeof reloadAfter === 'number',
     );
   }
 
@@ -231,6 +265,7 @@ export function normalizeConfig(raw: unknown): NormalizedCardConfig {
     throw new ConfigError(
       `"live_duration" must be a number of seconds >= ${LIVE_DURATION_MIN_S} ` +
         `(got ${JSON.stringify(raw.live_duration)}).`,
+      typeof liveDuration === 'number',
     );
   }
 
@@ -771,7 +806,8 @@ export class SimplerCameraCard extends LitElement {
    * The visual editor. Home Assistant renders the form itself from the selector
    * schema in `editor.ts`; `normalizeConfig` is handed over as the fidelity
    * guard, so a config the form cannot represent throws and HA falls back to
-   * the YAML editor rather than mangling it.
+   * the YAML editor rather than mangling it. The editor filters that guard down
+   * to *structural* failures — see {@link ConfigError} and `assertConfig`.
    */
   static getConfigForm(): ConfigForm {
     return buildConfigForm(normalizeConfig);

@@ -23,6 +23,16 @@
  *    the YAML editor — which is exactly what should happen to a config the form
  *    cannot faithfully round-trip. Better an honest YAML fallback than a
  *    silently mangled dashboard.
+ *
+ *    The question it answers is therefore *"can the form represent this?"*, not
+ *    *"is this valid?"* — the two diverge because HA re-runs the guard on the
+ *    config the form itself emits, after **every keystroke**. Half-typed values
+ *    are momentarily invalid by design (`refresh_interval: 0` on the way to
+ *    `0.5`, `aspect_ratio: "16:"` on the way to `"16:9"`, `overlay: custom`
+ *    before its text exists), and throwing on those ejects the user to the YAML
+ *    editor mid-edit. So {@link buildConfigForm} swallows exactly the failures
+ *    the card marks `transient` and lets every structural one through; the card
+ *    itself (`setConfig`) still rejects both, unchanged.
  * 3. **`computeLabel` / `computeHelper` are optional overrides.** Without them
  *    HA falls back to its own generic translations and then to a title-cased
  *    field name; we supply English text for every field instead.
@@ -249,12 +259,31 @@ const HELPERS: Record<string, string> = {
 /* -------------------------------------------------------------------------- */
 
 /**
+ * A `ConfigError` the form can hold on screen while the user finishes typing.
+ *
+ * Duck-typed rather than an `instanceof` check: importing `ConfigError` from
+ * `card.ts` would close the import cycle this module exists on the far side of
+ * (see the file header). The shape it looks for — `name: 'ConfigError'` plus
+ * `transient: true` — is the one `card.ts` documents, and anything else thrown
+ * (a `TypeError` from a stub validator included) is treated as structural.
+ */
+function isTransientConfigError(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const candidate = error as { name?: unknown; transient?: unknown };
+  return candidate.name === 'ConfigError' && candidate.transient === true;
+}
+
+/**
  * Build the object `SimplerCameraCard.getConfigForm()` returns.
  *
  * @param validate the card's `normalizeConfig`. It is called for its throw, not
  *   its return value: HA renders the thrown message (already written for a
  *   human editing YAML) and falls back to the YAML editor. Passing it in rather
  *   than importing it keeps `card.ts → editor.ts` a one-way dependency.
+ *
+ *   Its *transient* throws are swallowed here — see point 2 of the file header.
+ *   That leniency is the editor's alone: `card.setConfig` calls the same
+ *   validator directly and still rejects every one of them.
  */
 export function buildConfigForm(validate: (config: unknown) => unknown): ConfigForm {
   return {
@@ -262,7 +291,11 @@ export function buildConfigForm(validate: (config: unknown) => unknown): ConfigF
     computeLabel: (schema) => LABELS[schema.name] ?? schema.name,
     computeHelper: (schema) => HELPERS[schema.name],
     assertConfig: (config) => {
-      validate(config);
+      try {
+        validate(config);
+      } catch (error) {
+        if (!isTransientConfigError(error)) throw error;
+      }
     },
   };
 }

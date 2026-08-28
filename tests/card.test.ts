@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DOUBLE_TAP_MS, HOLD_MS, type HassActionDetail } from '../src/actions';
-import { SimplerCameraCard, normalizeConfig } from '../src/card';
+import { ConfigError, SimplerCameraCard, normalizeConfig } from '../src/card';
 import { EndpointError } from '../src/endpoint';
 import type { StreamSupervisorDeps } from '../src/reliability/supervisor';
 import { SnapshotLoop } from '../src/snapshot';
@@ -414,6 +414,79 @@ describe('normalizeConfig — reload_after_minutes_down', () => {
     expect(() => normalizeConfig({ ...base, reload_after_minutes_down: '15' })).toThrow(
       /reload_after_minutes_down/,
     );
+  });
+});
+
+/*
+ * `normalizeConfig` rejects every config below — that is `setConfig` semantics
+ * and it never changes. The `transient` flag is metadata *about* the rejection,
+ * read only by the visual editor's `assertConfig` (see `editor.test.ts`): true
+ * where the offending value is one a user types through in the form, false
+ * where no form widget could have produced it.
+ */
+describe('normalizeConfig — transient vs structural errors', () => {
+  /** Assert the config is rejected, and return the `ConfigError` it threw. */
+  function rejection(raw: unknown): ConfigError {
+    let thrown: unknown;
+    expect(() => {
+      try {
+        normalizeConfig(raw);
+      } catch (error) {
+        thrown = error;
+        throw error;
+      }
+    }, JSON.stringify(raw)).toThrow();
+    expect(thrown, JSON.stringify(raw)).toBeInstanceOf(ConfigError);
+    return thrown as ConfigError;
+  }
+
+  it('marks half-typed but form-representable values transient', () => {
+    for (const raw of [
+      { type: CARD_TYPE },
+      { ...base, camera: '' },
+      { ...base, camera: null },
+      { ...base, refresh_interval: 0 },
+      { ...base, refresh_interval: Number.NaN },
+      { ...base, live_duration: 1 },
+      { ...base, reload_after_minutes_down: -1 },
+      { ...base, aspect_ratio: '16:' },
+      { ...base, aspect_ratio: 'wide' },
+      { ...base, aspect_ratio: 0 },
+      { ...base, overlay: 'custom' },
+      { ...base, overlay: 'custom', overlay_text: '' },
+      { ...base, stream: '' },
+      { ...base, stream: '  ' },
+    ]) {
+      expect(rejection(raw).transient, JSON.stringify(raw)).toBe(true);
+    }
+  });
+
+  it('marks everything the form cannot produce structural', () => {
+    for (const raw of [
+      'not a mapping',
+      [],
+      { ...base, camera: 42 },
+      { ...base, camera: 'front_yard' },
+      { ...base, camera: 'sensor.front_yard' },
+      { ...base, stream: 42 },
+      { ...base, mode: 'stills' },
+      { ...base, overlay: 'label' },
+      { ...base, overlay_text: 7 },
+      { ...base, refresh_interval: '4' },
+      { ...base, live_duration: '60' },
+      { ...base, reload_after_minutes_down: '15' },
+      { ...base, tap_to_live: 'yes' },
+      { ...base, aspect_ratio: true },
+      { ...base, tap_action: 'more-info' },
+      { ...base, hold_action: { action: 'explode' } },
+    ]) {
+      expect(rejection(raw).transient, JSON.stringify(raw)).toBe(false);
+    }
+  });
+
+  it('defaults to structural', () => {
+    expect(new ConfigError('boom').transient).toBe(false);
+    expect(new ConfigError('boom').name).toBe('ConfigError');
   });
 });
 

@@ -298,12 +298,86 @@ describe('assertConfig', () => {
     }
   });
 
-  it('rejects what normalizeConfig rejects, with its message', () => {
-    expect(() => form.assertConfig({ type: CARD_TYPE })).toThrow(/"camera" is required/);
-    expect(() =>
-      form.assertConfig({ type: CARD_TYPE, camera: 'camera.a', overlay: 'custom' }),
-    ).toThrow(/requires "overlay_text"/);
+  /*
+   * HA re-runs `assertConfig` on the config the form emits after every
+   * keystroke, and a throw ejects the user to the YAML editor mid-edit. So the
+   * guard's question is "can the form represent this?", not "is this valid?":
+   * values a user necessarily types *through* are tolerated here even though
+   * `normalizeConfig` (and therefore `setConfig`) still rejects every one of
+   * them — see the matching cases in `card.test.ts`.
+   */
+  it('tolerates the invalid values a user types through', () => {
+    const base = { type: CARD_TYPE, camera: 'camera.front_yard' };
+    const transient: Record<string, unknown>[] = [
+      // An empty picker: where every freshly added card starts.
+      { type: CARD_TYPE },
+      { ...base, camera: '' },
+      // "0" and "0." on the way to "0.5"; a cleared box.
+      { ...base, refresh_interval: 0 },
+      { ...base, refresh_interval: Number.NaN },
+      // "1" on the way to "10" — below the slider's 5 second minimum.
+      { ...base, live_duration: 1 },
+      { ...base, reload_after_minutes_down: -1 },
+      // Every prefix of "16:9" spends a keystroke or two unparseable.
+      { ...base, aspect_ratio: '16:' },
+      { ...base, aspect_ratio: '' },
+      { ...base, aspect_ratio: 0 },
+      // Picking "Custom text" necessarily precedes typing it.
+      { ...base, overlay: 'custom' },
+      { ...base, overlay: 'custom', overlay_text: '' },
+      // A stream box cleared on the way to a new sub-stream name.
+      { ...base, stream: '' },
+    ];
+    for (const config of transient) {
+      expect(() => form.assertConfig(config), JSON.stringify(config)).not.toThrow();
+      expect(() => normalizeConfig(config), JSON.stringify(config)).toThrow();
+    }
+  });
+
+  it('rejects what the form cannot represent, with normalizeConfig’s message', () => {
+    const base = { type: CARD_TYPE, camera: 'camera.front_yard' };
     expect(() => form.assertConfig('not a mapping')).toThrow(/expected a YAML mapping/);
+    expect(() => form.assertConfig({ ...base, mode: 'stills' })).toThrow(/"mode" must be one of/);
+    expect(() => form.assertConfig({ ...base, overlay: 'label' })).toThrow(
+      /"overlay" must be one of/,
+    );
+    // Right key, wrong type: no number box emits a string, so this is a config
+    // the form would silently rewrite rather than round-trip.
+    expect(() => form.assertConfig({ ...base, refresh_interval: '4' })).toThrow(
+      /"refresh_interval"/,
+    );
+    expect(() => form.assertConfig({ ...base, live_duration: '60' })).toThrow(/"live_duration"/);
+    expect(() => form.assertConfig({ ...base, tap_to_live: 'yes' })).toThrow(/"tap_to_live"/);
+    expect(() => form.assertConfig({ ...base, camera: 42 })).toThrow(/entity id/);
+    expect(() => form.assertConfig({ ...base, camera: 'sensor.front_yard' })).toThrow(
+      /must be a camera entity/,
+    );
+    expect(() => form.assertConfig({ ...base, overlay_text: 7 })).toThrow(/"overlay_text"/);
+    expect(() => form.assertConfig({ ...base, aspect_ratio: true })).toThrow(/"aspect_ratio"/);
+    expect(() => form.assertConfig({ ...base, tap_action: 'more-info' })).toThrow(
+      /must be an action object/,
+    );
+    expect(() => form.assertConfig({ ...base, hold_action: { action: 'explode' } })).toThrow(
+      /"hold_action.action" must be one of/,
+    );
+  });
+
+  it('passes through anything the validator throws that is not a transient ConfigError', () => {
+    const boom = new TypeError('validator blew up');
+    const stubbed = buildConfigForm(() => {
+      throw boom;
+    });
+    expect(() => stubbed.assertConfig({})).toThrow(boom);
+
+    // The duck-typed check needs both halves: the name and the flag.
+    const namedOnly = buildConfigForm(() => {
+      throw Object.assign(new Error('nope'), { name: 'ConfigError' });
+    });
+    expect(() => namedOnly.assertConfig({})).toThrow(/nope/);
+    const flagOnly = buildConfigForm(() => {
+      throw Object.assign(new Error('nope'), { transient: true });
+    });
+    expect(() => flagOnly.assertConfig({})).toThrow(/nope/);
   });
 });
 
@@ -315,6 +389,11 @@ describe('SimplerCameraCard.getConfigForm', () => {
     expect(() =>
       wired.assertConfig({ type: CARD_TYPE, camera: 'camera.front_yard' }),
     ).not.toThrow();
-    expect(() => wired.assertConfig({ type: CARD_TYPE })).toThrow(/"camera" is required/);
+    // Wired to the real validator: a structural failure still ejects to YAML,
+    // a half-typed one does not.
+    expect(() =>
+      wired.assertConfig({ type: CARD_TYPE, camera: 'camera.front_yard', mode: 'stills' }),
+    ).toThrow(/"mode" must be one of/);
+    expect(() => wired.assertConfig({ type: CARD_TYPE })).not.toThrow();
   });
 });
