@@ -268,6 +268,8 @@ export function fakeConfig(overrides: Partial<NormalizedCardConfig> = {}): Norma
     reload_after_minutes_down: 0,
     mode: 'live',
     refresh_interval: 5,
+    tap_to_live: false,
+    live_duration: 60,
     ...overrides,
   };
 }

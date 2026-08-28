@@ -68,6 +68,8 @@ function fakeConfig(overrides: Partial<NormalizedCardConfig> = {}): NormalizedCa
     reload_after_minutes_down: 0,
     mode: 'snapshot',
     refresh_interval: 5,
+    tap_to_live: false,
+    live_duration: 60,
     ...overrides,
   };
 }

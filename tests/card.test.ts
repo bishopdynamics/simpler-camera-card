@@ -242,6 +242,8 @@ describe('normalizeConfig — defaults', () => {
       reload_after_minutes_down: 0,
       mode: 'live',
       refresh_interval: 5,
+      tap_to_live: false,
+      live_duration: 60,
     });
   });
 
@@ -303,6 +305,48 @@ describe('normalizeConfig — mode and refresh_interval', () => {
     for (const interval of ['4', true, Number.NaN, Number.POSITIVE_INFINITY]) {
       expect(() => normalizeConfig({ ...base, refresh_interval: interval })).toThrow(
         /"refresh_interval"/,
+      );
+    }
+  });
+});
+
+describe('normalizeConfig — tap_to_live and live_duration', () => {
+  it('defaults to disabled with a 60 second window', () => {
+    const config = normalizeConfig(base);
+    expect(config.tap_to_live).toBe(false);
+    expect(config.live_duration).toBe(60);
+  });
+
+  it('accepts an explicit true and a fractional duration', () => {
+    const config = normalizeConfig({ ...base, tap_to_live: true, live_duration: 7.5 });
+    expect(config.tap_to_live).toBe(true);
+    expect(config.live_duration).toBe(7.5);
+  });
+
+  it('accepts the 5 second minimum', () => {
+    expect(normalizeConfig({ ...base, live_duration: 5 }).live_duration).toBe(5);
+  });
+
+  it('rejects a non-boolean tap_to_live', () => {
+    for (const value of ['yes', 1]) {
+      expect(() => normalizeConfig({ ...base, tap_to_live: value })).toThrow(
+        /"tap_to_live" must be a boolean/,
+      );
+    }
+  });
+
+  it('rejects live_duration below the 5 second minimum', () => {
+    for (const duration of [4.9, 0, -1]) {
+      expect(() => normalizeConfig({ ...base, live_duration: duration })).toThrow(
+        /"live_duration" must be a number of seconds >= 5/,
+      );
+    }
+  });
+
+  it('rejects non-numeric and non-finite live_duration', () => {
+    for (const duration of ['60', Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(() => normalizeConfig({ ...base, live_duration: duration })).toThrow(
+        /"live_duration"/,
       );
     }
   });

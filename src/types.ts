@@ -187,6 +187,8 @@ export const VIEW_MODES: readonly ViewMode[] = ['live', 'snapshot'];
  * reload_after_minutes_down: 0
  * mode: live
  * refresh_interval: 5
+ * tap_to_live: false
+ * live_duration: 60
  * ```
  *
  * Produced by: Lovelace. Validated and normalized by `card.ts`.
@@ -225,6 +227,21 @@ export interface SimplerCameraCardConfig {
    */
   refresh_interval?: number;
   /**
+   * Only meaningful under `mode: snapshot` — ignored under `mode: live`, like
+   * {@link refresh_interval}. When `true`, a tap on the card temporarily
+   * switches it to the real live stream for {@link live_duration} seconds
+   * (reverting early on a second tap) instead of firing `tap_action`. Default
+   * `false`.
+   */
+  tap_to_live?: boolean;
+  /**
+   * Seconds the card stays live after a `tap_to_live` toggle before reverting
+   * to snapshot polling; fractional values are allowed but the minimum is
+   * {@link LIVE_DURATION_MIN_S}. Only meaningful under `mode: snapshot` with
+   * `tap_to_live: true`. Default `60`.
+   */
+  live_duration?: number;
+  /**
    * Lovelace injects its own keys (`view_layout`, `grid_options`,
    * `visibility`, ...). They are ignored, not rejected.
    */
@@ -252,6 +269,9 @@ export interface NormalizedCardConfig extends SimplerCameraCardConfig {
   mode: ViewMode;
   /** Seconds; snapshot mode only. Always present, even under `mode: live`. */
   refresh_interval: number;
+  tap_to_live: boolean;
+  /** Seconds; snapshot mode only. Always present, even under `mode: live`. */
+  live_duration: number;
 }
 
 /** Defaults applied by `normalizeConfig()`. Exported so tests assert on them. */
@@ -264,6 +284,8 @@ export const CONFIG_DEFAULTS = {
   reloadAfterMinutesDown: 0,
   mode: 'live' as ViewMode,
   refreshInterval: 5,
+  tapToLive: false,
+  liveDuration: 60,
 } as const;
 
 /* -------------------------------------------------------------------------- */
@@ -485,6 +507,13 @@ export const POSTER_REFRESH_INTERVAL_MS = 10_000;
  * Consumed by: `snapshot.ts` / `card.ts` (a later slice) and their tests.
  */
 export const SNAPSHOT_STALE_AFTER_FAILURES = 3;
+
+/**
+ * Tap-to-go-live: minimum allowed `live_duration`, in seconds. Used by config
+ * validation now; the editor and the card's window timer consume it in a
+ * later slice.
+ */
+export const LIVE_DURATION_MIN_S = 5;
 
 /* -------------------------------------------------------------------------- */
 /* Endpoint contract                                                           */

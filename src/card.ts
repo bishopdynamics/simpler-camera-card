@@ -41,6 +41,7 @@ import {
   CARD_TAG,
   CARD_TYPE,
   CONFIG_DEFAULTS,
+  LIVE_DURATION_MIN_S,
   OVERLAY_MODES,
   POSTER_REFRESH_INTERVAL_MS,
   VIEW_MODES,
@@ -211,6 +212,25 @@ export function normalizeConfig(raw: unknown): NormalizedCardConfig {
     );
   }
 
+  const tapToLive = raw.tap_to_live ?? CONFIG_DEFAULTS.tapToLive;
+  if (typeof tapToLive !== 'boolean') {
+    throw new ConfigError(
+      `"tap_to_live" must be a boolean (got ${JSON.stringify(raw.tap_to_live)}).`,
+    );
+  }
+
+  const liveDuration = raw.live_duration ?? CONFIG_DEFAULTS.liveDuration;
+  if (
+    typeof liveDuration !== 'number' ||
+    !Number.isFinite(liveDuration) ||
+    liveDuration < LIVE_DURATION_MIN_S
+  ) {
+    throw new ConfigError(
+      `"live_duration" must be a number of seconds >= ${LIVE_DURATION_MIN_S} ` +
+        `(got ${JSON.stringify(raw.live_duration)}).`,
+    );
+  }
+
   return {
     ...raw,
     type: typeof raw.type === 'string' ? raw.type : CARD_TYPE,
@@ -227,6 +247,8 @@ export function normalizeConfig(raw: unknown): NormalizedCardConfig {
     reload_after_minutes_down: reloadAfter,
     mode: mode as ViewMode,
     refresh_interval: refreshInterval,
+    tap_to_live: tapToLive,
+    live_duration: liveDuration,
   };
 }
 
