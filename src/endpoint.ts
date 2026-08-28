@@ -68,12 +68,18 @@ export class EndpointError extends Error {
  * "not a Frigate camera" retry loop. Falling back to the values from the last
  * successful resolution keeps reconnects working through the outage.
  *
+ * Each attribute is remembered on its own: HA strips them as a set when an
+ * entity goes unavailable, but a state carrying only *some* of them is ordinary
+ * (a partial attribute update), and writing such a state over the cache
+ * wholesale would erase a good `camera_name` with `undefined` — poisoning the
+ * entry, and with it every card bound to that entity, for the life of the page.
+ *
  * Module-level on purpose: the attributes are properties of the entity, so the
  * cache is shared by every card instance and survives config edits.
  */
 const lastKnownFrigateAttributes = new Map<
   string,
-  { clientId: string; cameraName: string | undefined }
+  { clientId: string | undefined; cameraName: string | undefined }
 >();
 
 /** Test hook: drop every cached attribute set. */
@@ -125,10 +131,12 @@ export function buildGo2rtcWsPath(hass: HomeAssistant, config: SimplerCameraCard
 
   const liveClientId = nonEmptyString(entity.attributes?.client_id);
   const liveCameraName = nonEmptyString(entity.attributes?.camera_name);
-  if (liveClientId !== undefined) {
+  // Merge, never replace: an attribute the current state does not carry keeps
+  // the value from the last state that did.
+  if (liveClientId !== undefined || liveCameraName !== undefined) {
     lastKnownFrigateAttributes.set(config.camera, {
-      clientId: liveClientId,
-      cameraName: liveCameraName,
+      clientId: liveClientId ?? cached?.clientId,
+      cameraName: liveCameraName ?? cached?.cameraName,
     });
   }
 
