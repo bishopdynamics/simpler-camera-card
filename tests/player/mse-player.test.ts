@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   LIVE_EDGE_TARGET_LAG_S,
   MAX_BACK_BUFFER_S,
+  MAX_HYGIENE_DEFERRAL_MS,
   MAX_STAGED_BYTES,
   MAX_STAGED_SEGMENTS,
   MsePlayer,
@@ -412,6 +413,99 @@ describe('buffer hygiene', () => {
     expect(harness.onDead).toHaveBeenCalledExactlyOnceWith('media-error');
   });
 
+  it('seeks across a timestamp discontinuity instead of declaring it broken', () => {
+    const harness = mountPlayer();
+    const sourceBuffer = playing(harness);
+    // A go2rtc producer restart under `mode: 'segments'`: two disjoint ranges,
+    // 1s of real media in front of the playhead and a 13s gap after it.
+    sourceBuffer.ranges = [
+      [100, 103],
+      [116, 118],
+    ];
+    harness.video.currentTime = 102;
+
+    sourceBuffer.finishUpdate();
+
+    expect(harness.onDead).not.toHaveBeenCalled();
+    expect(harness.video.currentTime).toBe(118 - LIVE_EDGE_TARGET_LAG_S);
+  });
+
+  it('seeks into the newest range when the playhead lands in a gap', () => {
+    const harness = mountPlayer();
+    const sourceBuffer = playing(harness);
+    sourceBuffer.ranges = [
+      [100, 103],
+      [116, 118],
+    ];
+    harness.video.currentTime = 104;
+
+    sourceBuffer.finishUpdate();
+
+    expect(harness.onDead).not.toHaveBeenCalled();
+    expect(harness.video.currentTime).toBe(118 - LIVE_EDGE_TARGET_LAG_S);
+  });
+
+  it('clamps the jump to a newest range shorter than the target lag', () => {
+    const harness = mountPlayer();
+    const sourceBuffer = playing(harness);
+    sourceBuffer.ranges = [
+      [100, 103],
+      [116, 116.2],
+    ];
+    harness.video.currentTime = 104;
+
+    sourceBuffer.finishUpdate();
+
+    // Seeking to 115.7 would land in front of everything buffered.
+    expect(harness.video.currentTime).toBe(116);
+  });
+
+  it('seeks backwards when a restarted producer resets timestamps', () => {
+    const harness = mountPlayer();
+    const sourceBuffer = playing(harness);
+    // Everything the playhead knew about is gone; the new lane starts at zero.
+    sourceBuffer.ranges = [[0, 2]];
+    harness.video.currentTime = 102;
+
+    sourceBuffer.finishUpdate();
+
+    expect(harness.onDead).not.toHaveBeenCalled();
+    expect(harness.video.currentTime).toBe(2 - LIVE_EDGE_TARGET_LAG_S);
+    // …and the new media is not mistaken for back-buffer and removed.
+    expect(sourceBuffer.removed).toEqual([]);
+  });
+
+  it('measures the back-buffer from the range holding the playhead', () => {
+    const harness = mountPlayer();
+    const sourceBuffer = playing(harness);
+    sourceBuffer.ranges = [
+      [0, 2],
+      [48, 52],
+    ];
+    harness.video.currentTime = 50;
+
+    sourceBuffer.finishUpdate();
+
+    // Only 2s of back-buffer exists in the playhead's own range, so the trim
+    // takes the stranded range in front of it rather than a cutoff measured
+    // across the gap.
+    expect(sourceBuffer.removed).toEqual([[0, 48]]);
+  });
+
+  it('still dies when the playhead really is far behind its own range', () => {
+    const harness = mountPlayer();
+    const sourceBuffer = playing(harness);
+    sourceBuffer.ranges = [
+      [0, 100],
+      [116, 118],
+    ];
+    harness.video.currentTime = 80;
+
+    sourceBuffer.finishUpdate();
+
+    expect(harness.onDead).toHaveBeenCalledExactlyOnceWith('media-error');
+  });
+
   it('does not judge buffer distances before playback has started', () => {
     const harness = mountPlayer();
     const sourceBuffer = handshake(harness);
@@ -425,6 +519,78 @@ describe('buffer hygiene', () => {
 
     expect(harness.onDead).not.toHaveBeenCalled();
     expect(harness.video.currentTime).toBe(0);
+  });
+
+  describe('under sustained append pressure', () => {
+    /**
+     * One append window on a stream that always has the next segment ready: a
+     * frame lands while the `SourceBuffer` is updating, then the update ends.
+     */
+    function pressuredUpdate(
+      harness: ReturnType<typeof mountPlayer>,
+      sourceBuffer: ReturnType<typeof playing>,
+      elapsedMs: number,
+    ) {
+      harness.socket.serverBinary(segment());
+      vi.advanceTimersByTime(elapsedMs);
+      sourceBuffer.finishUpdate();
+    }
+
+    it('runs hygiene even when a segment arrives during every append', () => {
+      vi.useFakeTimers();
+      const harness = mountPlayer();
+      const sourceBuffer = playing(harness);
+      sourceBuffer.ranges = [[0, 52]];
+      harness.video.currentTime = 50;
+
+      // Every `updateend` sees a non-empty staging queue, so draining always
+      // has something to do — the state that used to starve hygiene forever.
+      for (let i = 0; i < 12; i += 1) {
+        pressuredUpdate(harness, sourceBuffer, MAX_HYGIENE_DEFERRAL_MS / 4);
+      }
+
+      expect(sourceBuffer.appended.length).toBeGreaterThan(1);
+      expect(sourceBuffer.removed[0]).toEqual([0, 50 - MAX_BACK_BUFFER_S]);
+      expect(harness.onDead).not.toHaveBeenCalled();
+    });
+
+    it('still lets draining win until the deferral deadline passes', () => {
+      vi.useFakeTimers();
+      const harness = mountPlayer();
+      const sourceBuffer = playing(harness);
+      // Settle the first (always-due) hygiene pass before the buffer has any
+      // ranges, so the deferral clock starts from a known point.
+      sourceBuffer.finishUpdate();
+      sourceBuffer.ranges = [[0, 52]];
+      harness.video.currentTime = 50;
+      harness.socket.serverBinary(segment());
+
+      for (let i = 0; i < 4; i += 1) {
+        pressuredUpdate(harness, sourceBuffer, MAX_HYGIENE_DEFERRAL_MS / 5);
+      }
+      expect(sourceBuffer.removed).toEqual([]);
+
+      pressuredUpdate(harness, sourceBuffer, MAX_HYGIENE_DEFERRAL_MS / 5);
+      expect(sourceBuffer.removed).toEqual([[0, 50 - MAX_BACK_BUFFER_S]]);
+    });
+
+    it('drains the queue on the updateend of a trim it deferred behind', () => {
+      vi.useFakeTimers();
+      const harness = mountPlayer();
+      const sourceBuffer = playing(harness);
+      sourceBuffer.ranges = [[0, 52]];
+      harness.video.currentTime = 50;
+
+      // Hygiene is due, so this `updateend` trims instead of flushing.
+      pressuredUpdate(harness, sourceBuffer, MAX_HYGIENE_DEFERRAL_MS);
+      expect(sourceBuffer.removed).toHaveLength(1);
+      const appendedBeforeTrim = sourceBuffer.appended.length;
+
+      // The trim's own `updateend` is what finally drains the queue.
+      sourceBuffer.finishUpdate();
+      expect(sourceBuffer.appended.length).toBe(appendedBeforeTrim + 1);
+      expect(harness.onDead).not.toHaveBeenCalled();
+    });
   });
 });
 

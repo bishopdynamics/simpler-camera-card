@@ -25,13 +25,27 @@
  *   too long`) into a permanent stall with a perfectly healthy WebSocket.
  * - `appendBuffer` exceptions (`QuotaExceededError`, …) are surfaced as
  *   `media-error`, never swallowed.
- * - The back-buffer is trimmed to {@link MAX_BACK_BUFFER_S}.
- * - More than {@link MAX_BUFFERED_AHEAD_S} buffered ahead of playback means the
- *   element is decoding slower than the stream arrives (the "slow motion"
- *   pathology); the stream is declared broken rather than drifting further.
+ * - Every distance is measured **inside the buffered range that contains the
+ *   playhead**, never across the whole `buffered` span. `mode: 'segments'` plus
+ *   a go2rtc timestamp discontinuity (camera reconnect, producer restart)
+ *   leaves two disjoint ranges, and `end(last) - currentTime` then describes a
+ *   gap rather than any media the element has to decode.
+ * - The back-buffer is trimmed to {@link MAX_BACK_BUFFER_S}, and anything
+ *   stranded before the playhead's own range goes with it.
+ * - More than {@link MAX_BUFFERED_AHEAD_S} genuinely buffered ahead of playback
+ *   means the element is decoding slower than the stream arrives (the "slow
+ *   motion" pathology); the stream is declared broken rather than drifting
+ *   further.
  * - Falling more than {@link LIVE_EDGE_MAX_LAG_S} behind the live edge is fixed
  *   by **seeking** to the edge, never by chasing with `playbackRate` (which
- *   re-buffers on WebKit).
+ *   re-buffers on WebKit). A playhead sitting in a discontinuity gap — or in a
+ *   range that is no longer the newest — is the same seek, not a death: that
+ *   state heals itself the moment playback resumes in the newest range.
+ * - Hygiene runs on `updateend`, but a busy stream stages a fresh segment
+ *   during every append, and draining the queue takes priority over hygiene.
+ *   {@link MAX_HYGIENE_DEFERRAL_MS} bounds how long that can starve it: past
+ *   the deadline hygiene runs *before* the flush, so back-buffer trimming and
+ *   the live-edge seek keep happening under sustained append pressure.
  *
  * The player is one-shot and owns no recovery: every failure funnels into
  * `onDead(reason)` exactly once, and the supervisor decides what happens next.
@@ -94,6 +108,20 @@ export const LIVE_EDGE_MAX_LAG_S = 2;
  */
 export const LIVE_EDGE_TARGET_LAG_S = 0.5;
 
+/**
+ * How long buffer hygiene may be deferred by a backlog of staged segments.
+ *
+ * `updateend` normally alternates between draining the staging queue and
+ * running hygiene, but on a stream that stages a segment during *every* append
+ * the drain branch wins every time and hygiene never runs at all — the
+ * back-buffer grows until `appendBuffer` throws `QuotaExceededError` and live
+ * latency drifts without bound. Once this long has passed, hygiene runs first
+ * and the flush waits for the trim's own `updateend`. A second is short enough
+ * that neither {@link MAX_BACK_BUFFER_S} nor {@link LIVE_EDGE_MAX_LAG_S} can be
+ * meaningfully overshot, and long enough to stay off the hot path.
+ */
+export const MAX_HYGIENE_DEFERRAL_MS = 1_000;
+
 /** `MediaSource`, as a value: injectable so tests can substitute a stub. */
 export interface MediaSourceConstructor {
   new (): MediaSource;
@@ -145,6 +173,8 @@ export class MsePlayer implements LivePlayer {
 
   /** Set once playback has genuinely advanced; gates the hygiene rules. */
   private playing = false;
+  /** `Date.now()` of the last hygiene pass; 0 until the first one. */
+  private lastHygieneAt = 0;
   /** Previous `timeupdate` position, used to detect *advancing* playback. */
   private lastTime: number | null = null;
 
@@ -351,54 +381,114 @@ export class MsePlayer implements LivePlayer {
 
   private afterUpdate(): void {
     if (this.state !== 'live') return;
-    if (this.staged.length > 0) {
+    if (this.staged.length > 0 && !this.hygieneIsOverdue()) {
       // Drain first; hygiene runs on the `updateend` that follows.
       this.flushStaged();
       return;
     }
     this.runBufferHygiene();
+    // A trim leaves the `SourceBuffer` updating, in which case this is a no-op
+    // and the staged segments go out on the trim's own `updateend` instead.
+    this.flushStaged();
+  }
+
+  /** True once draining has kept {@link runBufferHygiene} waiting too long. */
+  private hygieneIsOverdue(): boolean {
+    return Date.now() - this.lastHygieneAt >= MAX_HYGIENE_DEFERRAL_MS;
   }
 
   private runBufferHygiene(): void {
     const sourceBuffer = this.sourceBuffer;
     const video = this.video;
     if (!sourceBuffer || !video || sourceBuffer.updating) return;
+    this.lastHygieneAt = Date.now();
 
     const buffered = sourceBuffer.buffered;
     if (!buffered || buffered.length === 0) return;
-    const start = buffered.start(0);
-    const end = buffered.end(buffered.length - 1);
+    const newestEnd = buffered.end(buffered.length - 1);
+    const newestStart = buffered.start(buffered.length - 1);
 
     // Before playback starts, `currentTime` is 0 while the media's own
-    // timestamps can be arbitrarily large, so neither distance below is
-    // meaningful yet.
-    if (this.playing) {
-      const ahead = end - video.currentTime;
-      if (ahead > MAX_BUFFERED_AHEAD_S) {
-        console.info(
-          `${LOG_PREFIX} ${ahead.toFixed(1)}s buffered ahead of playback ` +
-            `(limit ${MAX_BUFFERED_AHEAD_S}s): declaring the stream broken`,
-        );
-        this.die('media-error', 'buffered too far ahead of playback');
-        return;
-      }
-      if (ahead > LIVE_EDGE_MAX_LAG_S && !video.seeking) {
-        const target = end - LIVE_EDGE_TARGET_LAG_S;
-        if (target > video.currentTime) {
-          console.info(`${LOG_PREFIX} ${ahead.toFixed(1)}s behind the live edge: jumping to live`);
-          video.currentTime = target;
-        }
-      }
+    // timestamps can be arbitrarily large, so no distance below is meaningful
+    // yet — and `containing` would spuriously report a gap.
+    if (!this.playing) return;
+
+    const containing = rangeContaining(buffered, video.currentTime);
+
+    if (containing === null) {
+      // The playhead is in a discontinuity gap (or outside the buffer
+      // entirely): there is nothing to decode where it stands, and nothing
+      // broken about the stream. Seeking into the newest range is the whole
+      // recovery — note the jump may well be *backwards*, since a restarted
+      // go2rtc producer can reset timestamps below the old ones.
+      this.jumpToLive(video, newestStart, newestEnd, 'playhead is outside every buffered range');
+      return;
     }
 
-    const cutoff = video.currentTime - MAX_BACK_BUFFER_S;
-    if (cutoff > start && this.mediaSource?.readyState === 'open') {
-      try {
-        sourceBuffer.remove(start, cutoff);
-      } catch (error) {
-        // A failed trim wastes memory but does not break playback.
-        console.info(`${LOG_PREFIX} back-buffer trim failed:`, error);
-      }
+    const ahead = buffered.end(containing) - video.currentTime;
+    if (ahead > MAX_BUFFERED_AHEAD_S) {
+      // Genuinely pathological: this much media really is queued in front of
+      // the playhead, so the element is decoding slower than the stream lands.
+      console.info(
+        `${LOG_PREFIX} ${ahead.toFixed(1)}s buffered ahead of playback ` +
+          `(limit ${MAX_BUFFERED_AHEAD_S}s): declaring the stream broken`,
+      );
+      this.die('media-error', 'buffered too far ahead of playback');
+      return;
+    }
+
+    if (containing !== buffered.length - 1) {
+      // Playing out a stale range while live has moved on to a newer one:
+      // waiting only stalls at the gap, so jump across it now.
+      this.jumpToLive(video, newestStart, newestEnd, 'a newer buffered range is live');
+      return;
+    }
+
+    if (ahead > LIVE_EDGE_MAX_LAG_S) {
+      this.jumpToLive(video, newestStart, newestEnd, `${ahead.toFixed(1)}s behind the live edge`);
+    }
+
+    this.trimBackBuffer(sourceBuffer, video, buffered.start(containing));
+  }
+
+  /**
+   * Seek to just behind the end of the newest buffered range, clamped to its
+   * start: a range that has only just begun can be shorter than the target lag,
+   * and seeking in front of it would land in nothing.
+   */
+  private jumpToLive(
+    video: HTMLVideoElement,
+    newestStart: number,
+    newestEnd: number,
+    why: string,
+  ): void {
+    if (video.seeking) return;
+    const target = Math.max(newestStart, newestEnd - LIVE_EDGE_TARGET_LAG_S);
+    if (target === video.currentTime) return;
+    console.info(`${LOG_PREFIX} ${why}: jumping to live`);
+    video.currentTime = target;
+  }
+
+  /**
+   * Drop everything before {@link MAX_BACK_BUFFER_S} of already-played media.
+   * The cutoff never reaches into the playhead's own range beyond that budget,
+   * but it does clear ranges stranded in front of it by a discontinuity.
+   */
+  private trimBackBuffer(
+    sourceBuffer: SourceBuffer,
+    video: HTMLVideoElement,
+    containingStart: number,
+  ): void {
+    const buffered = sourceBuffer.buffered;
+    if (!buffered || buffered.length === 0 || sourceBuffer.updating) return;
+    const start = buffered.start(0);
+    const cutoff = Math.max(video.currentTime - MAX_BACK_BUFFER_S, containingStart);
+    if (cutoff <= start || this.mediaSource?.readyState !== 'open') return;
+    try {
+      sourceBuffer.remove(start, cutoff);
+    } catch (error) {
+      // A failed trim wastes memory but does not break playback.
+      console.info(`${LOG_PREFIX} back-buffer trim failed:`, error);
     }
   }
 
@@ -528,6 +618,19 @@ export function supportedCodecs(mediaSourceImpl: MediaSourceConstructor): string
       return false;
     }
   }).join(',');
+}
+
+/**
+ * Index of the buffered range holding `time`, or `null` when it falls in a gap
+ * between ranges (or outside them all). Both bounds count as inside: a playhead
+ * parked exactly on the end of a range is waiting for the next fragment, which
+ * is ordinary live playback, not a discontinuity.
+ */
+export function rangeContaining(buffered: TimeRanges, time: number): number | null {
+  for (let index = 0; index < buffered.length; index += 1) {
+    if (time >= buffered.start(index) && time <= buffered.end(index)) return index;
+  }
+  return null;
 }
 
 function describe(error: unknown): string {
