@@ -115,6 +115,8 @@ reload_after_minutes_down: 30     # last-resort page reload
 | `double_tap_action` | action object | `{ action: none }` | Two taps within 250 ms. |
 | `aspect_ratio` | `"W:H"` or number | `16:9` | Accepts `"16:9"`, `"16/9"` or a bare number such as `1.78`. The video is letterboxed inside it (`object-fit: contain`). |
 | `reload_after_minutes_down` | number (minutes) | `0` (off) | Escape hatch: reload the whole page after this many consecutive minutes down. |
+| `mode` | `live` \| `snapshot` | `live` | `live` decodes the MSE stream continuously; `snapshot` polls a still image instead. See [Snapshot mode](#snapshot-mode). |
+| `refresh_interval` | number (seconds) | `5` | How often a new still is fetched. Only meaningful under `mode: snapshot`; minimum `1`, fractional values allowed. |
 
 Action objects are Home Assistant's standard ones. `action:` must be one of `more-info`, `toggle`,
 `navigate`, `url`, `perform-action`, `assist`, `none`; the remaining fields (`navigation_path`,
@@ -147,6 +149,30 @@ stream: front_yard_sub         # the go2rtc stream actually played
 
 Use it for the cameras in a grid and save the main stream for the full-screen view. Without `stream:`,
 the card plays the stream named by the entity's `camera_name` attribute (the main stream).
+
+## Snapshot mode
+
+By default the card decodes the live MSE stream continuously. Set `mode: snapshot` to swap that for a
+still image, refreshed every `refresh_interval` seconds (default `5`, minimum `1`, fractional values
+allowed) — no WebSocket, no `MediaSource`, no video decode pipeline at all. To set expectations:
+this is a slideshow, not low-framerate video. For low-resource kiosks — old tablets, many
+cards on one dashboard, a Pi driving the display — that trade is usually a win.
+
+```yaml
+type: custom:simpler-camera-card
+camera: camera.front_yard
+mode: snapshot
+refresh_interval: 4
+```
+
+Overlay, tap/hold/double-tap actions and `aspect_ratio` all behave exactly as in live mode. A failed
+refresh keeps the last good frame on screen and retries on the next tick — the same
+never-a-dead-end philosophy as live mode's reconnect logic (see [How recovery works](#how-recovery-works)).
+
+If what you actually want is smooth low-framerate *video* rather than a slideshow, that needs
+server-side transcoding, which this card does not do. Define an ffmpeg `fps=`-filtered stream in
+go2rtc and select it with the existing `stream:` option — go2rtc does the frame-dropping, not the
+card.
 
 ## How recovery works
 

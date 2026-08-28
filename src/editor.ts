@@ -34,7 +34,7 @@
  * drive the guard with a stub.
  */
 
-import { OVERLAY_MODES } from './types';
+import { OVERLAY_MODES, VIEW_MODES } from './types';
 
 /* -------------------------------------------------------------------------- */
 /* Local mirror of HA's form types                                             */
@@ -98,6 +98,8 @@ const ENUM_LABELS: Record<string, string> = {
   none: 'None',
   name: 'Entity name',
   custom: 'Custom text',
+  live: 'Live stream (MSE)',
+  snapshot: 'Snapshots (low resource)',
 };
 
 function optionsFrom(values: readonly string[]): { value: string; label: string }[] {
@@ -108,6 +110,7 @@ function optionsFrom(values: readonly string[]): { value: string; label: string 
 }
 
 const OVERLAY_OPTIONS = optionsFrom(OVERLAY_MODES);
+const MODE_OPTIONS = optionsFrom(VIEW_MODES);
 
 /* -------------------------------------------------------------------------- */
 /* Schema                                                                      */
@@ -158,6 +161,11 @@ const SCHEMA: readonly ConfigFormNode[] = [
     flatten: true,
     schema: [
       { name: 'stream', selector: { text: {} } },
+      { name: 'mode', selector: { select: { mode: 'dropdown', options: MODE_OPTIONS } } },
+      {
+        name: 'refresh_interval',
+        selector: { number: { min: 1, step: 0.5, mode: 'box', unit_of_measurement: 's' } },
+      },
       {
         name: 'reload_after_minutes_down',
         selector: { number: { min: 0, mode: 'box', unit_of_measurement: 'min' } },
@@ -185,6 +193,8 @@ const LABELS: Record<string, string> = {
   hold_action: 'Hold action',
   double_tap_action: 'Double tap action',
   aspect_ratio: 'Aspect ratio',
+  mode: 'Display mode',
+  refresh_interval: 'Snapshot refresh interval',
   reload_after_minutes_down: 'Reload after minutes down',
   interactions: 'Interactions',
   advanced: 'Advanced',
@@ -203,11 +213,16 @@ const HELPERS: Record<string, string> = {
   tap_action: 'more-info opens Home Assistant’s own live camera dialog.',
   hold_action: 'Fired after pressing and holding for half a second.',
   double_tap_action: 'Fired on two taps within 250 ms.',
+  mode:
+    'Live stream decodes video continuously. Snapshots poll a still image instead — no ' +
+    'WebSocket or video decode, for low-resource kiosks.',
+  refresh_interval:
+    'Only applies in Snapshots mode: how often a new still is fetched. Minimum 1 second.',
   reload_after_minutes_down:
     'Last resort: reload the whole page after this many consecutive minutes down. ' +
     '0 disables it.',
   interactions: 'What tapping, holding and double-tapping the card do.',
-  advanced: 'Sub-stream selection and the last-resort page reload.',
+  advanced: 'Sub-stream selection, display mode and the last-resort page reload.',
 };
 
 /* -------------------------------------------------------------------------- */

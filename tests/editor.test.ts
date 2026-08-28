@@ -7,7 +7,7 @@ import {
   type ConfigFormField,
   type ConfigFormNode,
 } from '../src/editor';
-import { CARD_TYPE, OVERLAY_MODES, type SimplerCameraCardConfig } from '../src/types';
+import { CARD_TYPE, OVERLAY_MODES, VIEW_MODES, type SimplerCameraCardConfig } from '../src/types';
 
 const form: ConfigForm = buildConfigForm(normalizeConfig);
 
@@ -41,6 +41,8 @@ const EVERY_OPTION: SimplerCameraCardConfig = {
   double_tap_action: { action: 'none' },
   aspect_ratio: '16:9',
   reload_after_minutes_down: 30,
+  mode: 'snapshot',
+  refresh_interval: 4,
 };
 
 const CONFIG_KEYS = Object.keys(EVERY_OPTION).filter((key) => key !== 'type');
@@ -188,6 +190,20 @@ describe('config form schema', () => {
       number: { min: 0, mode: 'box', unit_of_measurement: 'min' },
     });
   });
+
+  it('offers exactly the display modes validation accepts', () => {
+    const options = (field('mode').selector.select as { options: { value: string; label: string }[] })
+      .options;
+    expect(options.map((o) => o.value)).toEqual([...VIEW_MODES]);
+    expect((field('mode').selector.select as { mode: string }).mode).toBe('dropdown');
+    for (const option of options) expect(option.label).not.toBe('');
+  });
+
+  it('requires a snapshot refresh interval of at least 1 second, fractional allowed', () => {
+    expect(field('refresh_interval').selector).toEqual({
+      number: { min: 1, step: 0.5, mode: 'box', unit_of_measurement: 's' },
+    });
+  });
 });
 
 describe('computeLabel / computeHelper', () => {
@@ -232,7 +248,7 @@ describe('assertConfig', () => {
   it('accepts every example config in the README', () => {
     // Guard the guard: if the README parser silently produced junk, every
     // assertion below would pass vacuously. The fullest example is spelled out.
-    expect(readmeExamples).toHaveLength(3);
+    expect(readmeExamples).toHaveLength(4);
     expect(readmeExamples[1]).toEqual({
       type: CARD_TYPE,
       camera: 'camera.front_yard',
@@ -242,6 +258,13 @@ describe('assertConfig', () => {
       hold_action: { action: 'navigate', navigation_path: '/lovelace/cameras' },
       aspect_ratio: '16:9',
       reload_after_minutes_down: 30,
+    });
+    // The Snapshot mode example, last in the file.
+    expect(readmeExamples[3]).toEqual({
+      type: CARD_TYPE,
+      camera: 'camera.front_yard',
+      mode: 'snapshot',
+      refresh_interval: 4,
     });
 
     for (const example of readmeExamples) {
