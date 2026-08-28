@@ -4,6 +4,7 @@ This is where a new session looks for handoff information from previous sessions
 
 ## Current
 
+- 2026-08-28 — **tap-to-go-live ACCEPTED** ("This works great, consider this signed off" — field-verified at v0.5.0; spec done, queue empty). Next up per James: a change to the visual editor's field layout ("where things go").
 - 2026-08-27 (same session, cont.) — **tap-to-go-live implemented, v0.5.0 awaiting field acceptance.**
   - FEATURE_SPEC_tap_to_live: spec'd and approved in one step ("spec it and go"), 3 serial slices same day (`905def8` config, `c6ec0fe` runtime, `aea7062` editor/docs/release). 303 unit tests green.
   - Runtime: `_temporaryLive` flag picks the effective mode; tap toggles engines via existing `_stopEverything()`/`_maybeStart()`; window timer + 1 Hz "LIVE · Ns" pill; reverts on second tap / expiry / hidden / `setConfig` / disconnect. Tap seam: `ActionController` gained opt-in `onTap?: () => boolean` (needed because `action: none` short-circuits before dispatch); `isInteractive()` true for `tap_to_live` snapshot cards.

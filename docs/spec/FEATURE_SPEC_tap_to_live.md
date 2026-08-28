@@ -1,6 +1,6 @@
 # SPEC: Tap-to-go-live (temporary live window on a snapshot card)
 
-- **Status:** in-progress (decisions approved by James 2026-08-27 — "yes to all three, spec it and go")
+- **Status:** done (accepted 2026-08-28 — field-verified by James at v0.5.0: "This works great, consider this signed off")
 
 ## Summary
 
