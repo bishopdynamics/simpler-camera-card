@@ -429,9 +429,19 @@ export class StreamSupervisorImpl implements StreamSupervisor {
    * back, so there is no reason to sit out the rest of a backoff — and a tab
    * that was frozen never ran the pending timer anyway.
    *
+   * The event means "try again *now*", never "forget the failures". Only a
+   * successful attempt ({@link StreamSupervisorImpl.handlePlaying}) rewinds the
+   * ladder: an HA socket that flaps every 15 s while go2rtc is genuinely down
+   * would otherwise pin tier 2 at its 5 s base forever, hammering a recovering
+   * server instead of backing off toward the cap. So the escalation survives
+   * the event — if the immediate attempt also fails, the next delay picks up
+   * where the ladder left off.
+   *
    * While `playing` this is deliberately a no-op: the stream either still has
    * frames (nothing to do) or does not, in which case the watchdog convicts it
    * within 10 s. Reconnecting a healthy stream on every websocket blip is churn.
+   * With nothing pending (mid-attempt, or `idle`) there is likewise nothing to
+   * do, and no state — backoff included — is touched.
    */
   private handleConnectivityEvent(ev: 'hass-reconnected' | 'page-resumed'): void {
     if (!this.started || this.suspended) return;
@@ -441,8 +451,6 @@ export class StreamSupervisorImpl implements StreamSupervisor {
       return;
     }
 
-    // Fresh network ⇒ fresh optimism.
-    this.backoff.reset();
     if (this.retryTimer.pending) {
       this.log.info(`${LOG_PREFIX} ${ev}: retrying immediately`);
       this.pending = { ...this.pending, reason: ev };
