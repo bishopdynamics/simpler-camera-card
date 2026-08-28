@@ -6,37 +6,57 @@ import {
   MAX_STAGED_BYTES,
   MAX_STAGED_SEGMENTS,
   MsePlayer,
+  mediaSourceIsAvailable,
+  pickMediaSourceImpl,
   supportedCodecs,
   type MediaSourceConstructor,
+  type MsePlayerOptions,
 } from '../../src/player/mse-player';
 import type { WebSocketConstructor } from '../../src/player/go2rtc-client';
 import { HANDSHAKE_TIMEOUT_MS, type DeathReason } from '../../src/types';
-import { FakeMediaSource, FakeVideo, FakeWebSocket, installObjectUrlStubs, segment } from './stubs';
+import {
+  FakeManagedMediaSource,
+  FakeMediaSource,
+  FakeVideo,
+  FakeWebSocket,
+  installObjectUrlStubs,
+  objectUrlLog,
+  segment,
+} from './stubs';
 
 const WS_URL = 'wss://ha.local/api/frigate/frigate/go2rtc/ws/api/ws?src=front_yard&authSig=sig';
 const MIME = 'video/mp4; codecs="avc1.640029,mp4a.40.2"';
 
 const webSocketImpl = FakeWebSocket as unknown as WebSocketConstructor;
 const mediaSourceImpl = FakeMediaSource as unknown as MediaSourceConstructor;
+const managedMediaSourceImpl = FakeManagedMediaSource as unknown as MediaSourceConstructor;
+
+/** What a player is handed to drive the WebKit (`ManagedMediaSource`) path. */
+const managedOptions: MsePlayerOptions = {
+  mediaSourceImpl: managedMediaSourceImpl,
+  mediaSourceIsManaged: true,
+};
 
 let restoreObjectUrl: () => void;
 
 beforeEach(() => {
   FakeWebSocket.reset();
   FakeMediaSource.reset();
+  FakeManagedMediaSource.reset();
   restoreObjectUrl = installObjectUrlStubs();
   vi.spyOn(console, 'info').mockImplementation(() => {});
 });
 
 afterEach(() => {
   restoreObjectUrl();
+  vi.unstubAllGlobals();
   vi.restoreAllMocks();
   vi.useRealTimers();
 });
 
 /** A mounted player with its stubs and spied callbacks. */
-function mountPlayer() {
-  const player = new MsePlayer({ webSocketImpl, mediaSourceImpl });
+function mountPlayer(options: MsePlayerOptions = {}) {
+  const player = new MsePlayer({ webSocketImpl, mediaSourceImpl, ...options });
   const onPlaying = vi.fn();
   const onDead = vi.fn<(reason: DeathReason) => void>();
   player.onPlaying = onPlaying;
@@ -672,6 +692,123 @@ describe('destroy', () => {
     player.mount(new FakeVideo() as unknown as HTMLVideoElement, WS_URL);
 
     expect(FakeWebSocket.instances).toHaveLength(0);
+  });
+});
+
+describe('ManagedMediaSource (WebKit / iOS)', () => {
+  /** A player that reads its implementation off the globals, as production does. */
+  function mountFromGlobals() {
+    const player = new MsePlayer({ webSocketImpl });
+    const onDead = vi.fn<(reason: DeathReason) => void>();
+    player.onDead = onDead;
+    const video = new FakeVideo();
+    player.mount(video as unknown as HTMLVideoElement, WS_URL);
+    return { player, video, onDead };
+  }
+
+  it('attaches through srcObject, with remote playback disabled', () => {
+    const harness = mountPlayer(managedOptions);
+
+    expect(harness.video.srcObject).toBe(FakeMediaSource.last());
+    expect(harness.video.disableRemotePlayback).toBe(true);
+    // No blob URL is created at all on this path.
+    expect(harness.video.src).toBe('');
+    expect(objectUrlLog.created).toEqual([]);
+  });
+
+  it('leaves srcObject untouched on the classic path', () => {
+    const harness = mountPlayer();
+
+    expect(harness.video.srcObject).toBeNull();
+    expect(harness.video.disableRemotePlayback).toBe(false);
+    expect(harness.video.src).toBe(objectUrlLog.created[0]);
+  });
+
+  it('completes the whole handshake over the managed attachment', () => {
+    const harness = mountPlayer(managedOptions);
+
+    const sourceBuffer = handshake(harness);
+    harness.socket.serverBinary(segment());
+
+    expect(harness.mediaSource.mime).toBe(MIME);
+    expect(harness.video.play).toHaveBeenCalledTimes(1);
+    expect(sourceBuffer.appended).toHaveLength(1);
+    expect(harness.onDead).not.toHaveBeenCalled();
+  });
+
+  it('offers the codecs the *selected* implementation supports', () => {
+    // The classic double still says yes to everything: anything but the one
+    // codec below proves the wrong constructor was asked.
+    FakeManagedMediaSource.supports = (type) => type.includes('avc1.64002A');
+    const harness = mountPlayer(managedOptions);
+
+    harness.mediaSource.open();
+    harness.socket.serverOpen();
+
+    expect(harness.socket.sentMessages).toEqual([{ type: 'mse', value: 'avc1.64002A' }]);
+  });
+
+  it('clears srcObject on destroy, having revoked nothing', () => {
+    const harness = mountPlayer(managedOptions);
+    handshake(harness);
+
+    harness.player.destroy();
+
+    expect(harness.video.srcObject).toBeNull();
+    expect(harness.video.load).toHaveBeenCalledTimes(1);
+    expect(objectUrlLog.revoked).toEqual([]);
+  });
+
+  it('revokes the object URL on the classic path, and only there', () => {
+    const harness = mountPlayer();
+
+    // Destroyed before `sourceopen`, so teardown is what releases the URL.
+    harness.player.destroy();
+
+    expect(objectUrlLog.revoked).toEqual(objectUrlLog.created);
+    expect(harness.video.src).toBe('');
+    expect(harness.video.srcObject).toBeNull();
+  });
+
+  it('prefers ManagedMediaSource when the browser has both', () => {
+    vi.stubGlobal('MediaSource', FakeMediaSource);
+    vi.stubGlobal('ManagedMediaSource', FakeManagedMediaSource);
+
+    const { video } = mountFromGlobals();
+
+    expect(pickMediaSourceImpl()).toEqual({ ctor: FakeManagedMediaSource, managed: true });
+    expect(FakeMediaSource.last()).toBeInstanceOf(FakeManagedMediaSource);
+    expect(video.srcObject).toBe(FakeMediaSource.last());
+    expect(video.src).toBe('');
+  });
+
+  it('falls back to the classic MediaSource when that is all there is', () => {
+    vi.stubGlobal('MediaSource', FakeMediaSource);
+
+    const { video } = mountFromGlobals();
+
+    expect(FakeMediaSource.last()).not.toBeInstanceOf(FakeManagedMediaSource);
+    expect(video.srcObject).toBeNull();
+    expect(video.src).toMatch(/^blob:/);
+  });
+
+  it('reports no capability, and dies without a socket, when neither exists', () => {
+    expect(pickMediaSourceImpl()).toBeNull();
+    expect(mediaSourceIsAvailable()).toBe(false);
+
+    const { onDead } = mountFromGlobals();
+
+    expect(onDead).toHaveBeenCalledWith('media-error');
+    expect(FakeWebSocket.instances).toHaveLength(0);
+  });
+
+  it('reports a capability as soon as either constructor is present', () => {
+    vi.stubGlobal('ManagedMediaSource', FakeManagedMediaSource);
+    expect(mediaSourceIsAvailable()).toBe(true);
+    vi.unstubAllGlobals();
+
+    vi.stubGlobal('MediaSource', FakeMediaSource);
+    expect(mediaSourceIsAvailable()).toBe(true);
   });
 });
 

@@ -161,8 +161,13 @@ export class FakeMediaSource extends EventTarget {
   /** Overridable codec support predicate. */
   static supports: (type: string) => boolean = () => true;
 
-  static isTypeSupported(type: string): boolean {
-    return FakeMediaSource.supports(type);
+  /**
+   * `this`, not `FakeMediaSource`: the player asks the implementation it
+   * *selected*, and {@link FakeManagedMediaSource} must be able to answer
+   * differently from the classic one.
+   */
+  static isTypeSupported(this: { supports: (type: string) => boolean }, type: string): boolean {
+    return this.supports(type);
   }
 
   static last(): FakeMediaSource {
@@ -217,12 +222,35 @@ export class FakeMediaSource extends EventTarget {
   }
 }
 
+/**
+ * `ManagedMediaSource` — the only Media Source variant WebKit ships (iOS 17.1+).
+ *
+ * It behaves exactly like {@link FakeMediaSource}: everything the player does
+ * differently for it happens on the `<video>` element (`srcObject` instead of an
+ * object URL), so the double only needs a distinct identity and a codec
+ * predicate of its own. Instances land in `FakeMediaSource.instances`, so
+ * `FakeMediaSource.last()` returns them too.
+ */
+export class FakeManagedMediaSource extends FakeMediaSource {
+  /** Overridable independently of the classic double's. */
+  static supports: (type: string) => boolean = () => true;
+
+  /** Only the codec predicate; `FakeMediaSource.reset()` owns the instances. */
+  static reset(): void {
+    FakeManagedMediaSource.supports = () => true;
+  }
+}
+
 /* -------------------------------------------------------------------------- */
 /* <video>                                                                     */
 /* -------------------------------------------------------------------------- */
 
 export class FakeVideo extends EventTarget {
   src = '';
+  /** The managed attachment; `null` unless a `ManagedMediaSource` was attached. */
+  srcObject: unknown = null;
+  /** Set before a managed attachment, and never unset — see `destroy()`. */
+  disableRemotePlayback = false;
   muted = false;
   seeking = false;
   currentTime = 0;
@@ -252,6 +280,13 @@ export class FakeVideo extends EventTarget {
 /* -------------------------------------------------------------------------- */
 
 /**
+ * Every object URL the stubs below have handed out and taken back since the
+ * last {@link installObjectUrlStubs}. The managed (`srcObject`) attachment must
+ * create none at all, which is only observable here.
+ */
+export const objectUrlLog: { created: string[]; revoked: string[] } = { created: [], revoked: [] };
+
+/**
  * Install object-URL stubs (happy-dom's `createObjectURL` rejects anything that
  * is not a real `Blob`). Returns a restore function.
  */
@@ -263,8 +298,16 @@ export function installObjectUrlStubs(): () => void {
   const previousCreate = url.createObjectURL;
   const previousRevoke = url.revokeObjectURL;
   let counter = 0;
-  url.createObjectURL = () => `blob:fake-${(counter += 1)}`;
-  url.revokeObjectURL = () => {};
+  objectUrlLog.created = [];
+  objectUrlLog.revoked = [];
+  url.createObjectURL = () => {
+    const value = `blob:fake-${(counter += 1)}`;
+    objectUrlLog.created.push(value);
+    return value;
+  };
+  url.revokeObjectURL = (value: string) => {
+    objectUrlLog.revoked.push(value);
+  };
   return () => {
     url.createObjectURL = previousCreate;
     url.revokeObjectURL = previousRevoke;

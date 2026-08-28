@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DOUBLE_TAP_MS, HOLD_MS, type HassActionDetail } from '../src/actions';
 import { ConfigError, SimplerCameraCard, normalizeConfig } from '../src/card';
 import { EndpointError } from '../src/endpoint';
@@ -121,6 +121,14 @@ function snapshotSrc(card: SimplerCameraCard): string | undefined {
 function posterSrc(card: SimplerCameraCard): string | undefined {
   return card.shadowRoot?.querySelector('img.poster')?.getAttribute('src') ?? undefined;
 }
+
+beforeEach(() => {
+  // happy-dom implements no Media Source API at all, and the card's live
+  // preflight (see `_startSupervisor`) refuses to start without one. Every test
+  // below models an ordinary browser, so stand one in; the tests that model an
+  // iPhone without MediaSource stub it away again for themselves.
+  vi.stubGlobal('MediaSource', FakeMediaSource);
+});
 
 afterEach(() => {
   vi.useRealTimers();
@@ -1653,5 +1661,113 @@ describe('SimplerCameraCard — tap to go live', () => {
     expect(players).toHaveLength(1);
     expect(starts()).toBe(1);
     expect(poster.calls()).toBe(pollsWhileMounted);
+  });
+});
+
+describe('SimplerCameraCard — live capability preflight', () => {
+  const NO_MSE = 'Live view needs MediaSource (iOS 17.1+). Use mode: snapshot.';
+
+  /** An iPhone below 17.1 — or anything else with no Media Source API at all. */
+  function withoutMediaSource(): void {
+    vi.stubGlobal('MediaSource', undefined);
+    vi.stubGlobal('ManagedMediaSource', undefined);
+  }
+
+  /** A signed-URL resolver that counts the times the supervisor asked for one. */
+  function countingSignedUrl(): { calls: () => number; resolveSignedWsUrl: () => Promise<string> } {
+    let issued = 0;
+    return {
+      calls: () => issued,
+      resolveSignedWsUrl: async () => {
+        issued += 1;
+        return WS_URL;
+      },
+    };
+  }
+
+  it('says so permanently instead of retrying, on a mode: live card', async () => {
+    withoutMediaSource();
+    vi.useFakeTimers();
+    const signed = countingSignedUrl();
+    const { players, create } = recordingPlayerFactory();
+
+    const card = mountCard(base, {
+      createPlayer: create,
+      endpoint: stubEndpoint({ resolveSignedWsUrl: signed.resolveSignedWsUrl }),
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    await settle(card);
+
+    expect(statusText(card)).toBe(NO_MSE);
+    // Nothing was built and nothing was signed: no supervisor, so no socket.
+    expect(players).toHaveLength(0);
+    expect(signed.calls()).toBe(0);
+
+    // And no retry ladder is running behind the message.
+    await vi.advanceTimersByTimeAsync(5 * 60_000);
+    await settle(card);
+    expect(statusText(card)).toBe(NO_MSE);
+    expect(players).toHaveLength(0);
+    expect(signed.calls()).toBe(0);
+  });
+
+  it('leaves snapshot mode entirely alone in the same browser', async () => {
+    withoutMediaSource();
+    vi.useFakeTimers();
+    installImageStub();
+    const poster = countingPoster();
+    const { players, create } = recordingPlayerFactory();
+
+    const card = mountCard(
+      { ...base, mode: 'snapshot', refresh_interval: 2 },
+      {
+        createPlayer: create,
+        endpoint: stubEndpoint({ resolvePosterUrl: poster.resolvePosterUrl }),
+      },
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    await settle(card);
+
+    expect(snapshotSrc(card)).toContain('sig=0');
+    expect(statusText(card)).toBeUndefined();
+
+    await vi.advanceTimersByTimeAsync(2_000);
+    await settle(card);
+    expect(snapshotSrc(card)).toContain('sig=1');
+    expect(players).toHaveLength(0);
+  });
+
+  it('shows the message for a tap_to_live window, then reverts on schedule', async () => {
+    withoutMediaSource();
+    vi.useFakeTimers();
+    installImageStub();
+    const poster = countingPoster();
+    const { players, create } = recordingPlayerFactory();
+
+    const card = mountCard(
+      { ...base, mode: 'snapshot', refresh_interval: 2, tap_to_live: true, live_duration: 10 },
+      {
+        createPlayer: create,
+        endpoint: stubEndpoint({ resolvePosterUrl: poster.resolvePosterUrl }),
+      },
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    await settle(card);
+
+    tap(container(card));
+    await vi.advanceTimersByTimeAsync(0);
+    await settle(card);
+
+    // The window runs — the card is in live mode — but says why it cannot play.
+    expect(card.shadowRoot!.querySelector('video')).not.toBeNull();
+    expect(statusText(card)).toBe(NO_MSE);
+    expect(players).toHaveLength(0);
+
+    await vi.advanceTimersByTimeAsync(10_000);
+    await settle(card);
+
+    expect(card.shadowRoot!.querySelector('video')).toBeNull();
+    expect(statusText(card)).toBeUndefined();
+    expect(snapshotSrc(card)).toBeDefined();
   });
 });

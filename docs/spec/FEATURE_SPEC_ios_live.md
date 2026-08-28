@@ -1,6 +1,6 @@
 # SPEC: iOS live playback (ManagedMediaSource)
 
-- **Status:** draft
+- **Status:** in-progress (approved by James 2026-08-28)
 
 ## Summary
 

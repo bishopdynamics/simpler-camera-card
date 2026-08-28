@@ -4,8 +4,10 @@
  *
  * The handshake, in order:
  *
- * 1. `mount()` creates a `MediaSource`, attaches it to the `<video>` element
- *    and opens a {@link Go2rtcClient} on the freshly signed URL it was handed.
+ * 1. `mount()` creates a `MediaSource` — or, on WebKit, the `ManagedMediaSource`
+ *    that is the only variant iOS has ever shipped (see
+ *    {@link pickMediaSourceImpl}) — attaches it to the `<video>` element and
+ *    opens a {@link Go2rtcClient} on the freshly signed URL it was handed.
  * 2. On `sourceopen` the player announces the codecs this browser can actually
  *    play (`MediaSource.isTypeSupported` over {@link MSE_CANDIDATE_CODECS}) as
  *    `{ type: 'mse', value: '<codec>,<codec>,…' }`. The client queues the
@@ -127,11 +129,58 @@ export interface MediaSourceConstructor {
   isTypeSupported(type: string): boolean;
 }
 
+/**
+ * The Media Source implementation this browser offers, and which of the two
+ * attachment protocols it wants. See {@link pickMediaSourceImpl}.
+ */
+export interface SelectedMediaSource {
+  readonly ctor: MediaSourceConstructor;
+  /** `true` for `ManagedMediaSource`: attach with `srcObject`, not a blob URL. */
+  readonly managed: boolean;
+}
+
 export interface MsePlayerOptions {
   /** Defaults to `globalThis.WebSocket`. */
   webSocketImpl?: WebSocketConstructor;
-  /** Defaults to `globalThis.MediaSource`. */
+  /** Defaults to {@link pickMediaSourceImpl}'s choice. */
   mediaSourceImpl?: MediaSourceConstructor;
+  /**
+   * Whether an injected {@link MsePlayerOptions.mediaSourceImpl} is to be driven
+   * as a `ManagedMediaSource`. Ignored without one; `false` by default, so an
+   * existing test seam keeps the classic attachment it always had.
+   */
+  mediaSourceIsManaged?: boolean;
+}
+
+/**
+ * Pick the Media Source implementation to drive, or `null` when the browser has
+ * neither.
+ *
+ * `ManagedMediaSource` wins when both exist. iOS has never shipped the standard
+ * `MediaSource` — 17.1+ has only the managed one — so on iPhone this is the
+ * difference between live view and a dead card. Where both are present
+ * (iPadOS/macOS Safari) WebKit's guidance is still to prefer the managed one:
+ * it lets the UA manage buffer and power, and it is what upstream go2rtc's
+ * `video-rtc.js` selects, so this card stays on the path go2rtc itself tests.
+ */
+export function pickMediaSourceImpl(): SelectedMediaSource | null {
+  const globals = globalThis as {
+    ManagedMediaSource?: MediaSourceConstructor;
+    MediaSource?: MediaSourceConstructor;
+  };
+  if (globals.ManagedMediaSource) return { ctor: globals.ManagedMediaSource, managed: true };
+  if (globals.MediaSource) return { ctor: globals.MediaSource, managed: false };
+  return null;
+}
+
+/**
+ * True when this browser can play live at all — the card's preflight (see
+ * `card.ts`), which is why it lives next to the selection it mirrors. A browser
+ * with neither constructor can never succeed, so the card says so once instead
+ * of letting the supervisor retry an impossibility for ever.
+ */
+export function mediaSourceIsAvailable(): boolean {
+  return pickMediaSourceImpl() !== null;
 }
 
 /**
@@ -162,6 +211,8 @@ export class MsePlayer implements LivePlayer {
   private mediaSource: MediaSource | null = null;
   private sourceBuffer: SourceBuffer | null = null;
   private objectUrl: string | null = null;
+  /** `true` once the media was attached as `srcObject` (the managed path). */
+  private attachedAsSrcObject = false;
   private handshakeTimer: ReturnType<typeof setTimeout> | null = null;
   /** Codec list offered to go2rtc; computed once in {@link MsePlayer.mount}. */
   private codecs = '';
@@ -207,22 +258,30 @@ export class MsePlayer implements LivePlayer {
     // exactly the silent failure this timer exists for.
     this.handshakeTimer = setTimeout(() => this.die('handshake-timeout'), HANDSHAKE_TIMEOUT_MS);
 
-    const mediaSourceImpl =
-      this.options.mediaSourceImpl ??
-      (globalThis as { MediaSource?: MediaSourceConstructor }).MediaSource;
-    if (!mediaSourceImpl) {
+    // The injected seam keeps absolute priority — including its `managed` hint,
+    // which is the only way a test can exercise the WebKit attachment.
+    const selected: SelectedMediaSource | null = this.options.mediaSourceImpl
+      ? {
+          ctor: this.options.mediaSourceImpl,
+          managed: this.options.mediaSourceIsManaged ?? false,
+        }
+      : pickMediaSourceImpl();
+    if (!selected) {
+      // The card's preflight normally catches this before a player is ever
+      // built; this remains for a player constructed some other way.
       this.die('media-error', 'MediaSource is unavailable in this browser');
       return;
     }
 
-    const codecs = supportedCodecs(mediaSourceImpl);
+    // Whichever implementation was chosen answers for its own codecs.
+    const codecs = supportedCodecs(selected.ctor);
     if (codecs === '') {
       this.die('media-error', 'no MSE codec offered by this browser is usable');
       return;
     }
     this.codecs = codecs;
 
-    if (!this.attachMediaSource(mediaSourceImpl, video)) return;
+    if (!this.attachMediaSource(selected, video)) return;
 
     const client = new Go2rtcClient(signedWsUrl, { webSocketImpl: this.options.webSocketImpl });
     this.client = client;
@@ -243,14 +302,25 @@ export class MsePlayer implements LivePlayer {
     this.teardown();
   }
 
-  /** Create the `MediaSource` and point the element at it. */
-  private attachMediaSource(
-    mediaSourceImpl: MediaSourceConstructor,
-    video: HTMLVideoElement,
-  ): boolean {
+  /**
+   * Create the `MediaSource` and point the element at it.
+   *
+   * Two protocols, one per implementation:
+   *
+   * - **managed** (`ManagedMediaSource`, WebKit) — `disableRemotePlayback` must
+   *   be set *before* the attachment or the source never opens (a remote target
+   *   could take over playback the UA is managing buffers for), and the media is
+   *   handed over as `srcObject`. That is exactly what upstream go2rtc's
+   *   `video-rtc.js` does, and it sidesteps the WebKit versions that refuse an
+   *   object URL over a `ManagedMediaSource`.
+   * - **classic** (`MediaSource`, Chromium/Firefox) — the blob URL, unchanged.
+   *
+   * `sourceopen` fires the same way for both, so nothing downstream branches.
+   */
+  private attachMediaSource(selected: SelectedMediaSource, video: HTMLVideoElement): boolean {
     let mediaSource: MediaSource;
     try {
-      mediaSource = new mediaSourceImpl();
+      mediaSource = new selected.ctor();
     } catch (error) {
       this.die(
         'media-error',
@@ -262,8 +332,14 @@ export class MsePlayer implements LivePlayer {
     mediaSource.addEventListener('sourceopen', this.handleSourceOpen, { once: true });
 
     try {
-      this.objectUrl = URL.createObjectURL(mediaSource);
-      video.src = this.objectUrl;
+      if (selected.managed) {
+        video.disableRemotePlayback = true;
+        video.srcObject = mediaSource;
+        this.attachedAsSrcObject = true;
+      } else {
+        this.objectUrl = URL.createObjectURL(mediaSource);
+        video.src = this.objectUrl;
+      }
     } catch (error) {
       this.die(
         'media-error',
@@ -596,13 +672,19 @@ export class MsePlayer implements LivePlayer {
     }
 
     const video = this.video;
+    const attachedAsSrcObject = this.attachedAsSrcObject;
     this.video = null;
+    this.attachedAsSrcObject = false;
     if (video) {
       video.removeEventListener('error', this.handleVideoError);
       video.removeEventListener('timeupdate', this.handleTimeUpdate);
       // Detach the media so the element stops holding decoder resources; the
-      // supervisor reuses the same element for the next attempt.
+      // supervisor reuses the same element for the next attempt. Only the
+      // attachment this player actually made is cleared — `disableRemotePlayback`
+      // deliberately stays set, since the card is muted, never AirPlays, and the
+      // next attempt on this same element wants it set anyway.
       quietly(() => {
+        if (attachedAsSrcObject) video.srcObject = null;
         video.removeAttribute('src');
         video.load();
       });

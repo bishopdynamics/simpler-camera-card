@@ -37,7 +37,7 @@ import { ActionController, isInteractive } from './actions';
 import { buildConfigForm, type ConfigForm } from './editor';
 import { endpointResolver } from './endpoint';
 import { LOG_PREFIX, describeError } from './errors';
-import { MsePlayer } from './player/mse-player';
+import { MsePlayer, mediaSourceIsAvailable } from './player/mse-player';
 import { StreamSupervisorImpl, type StreamSupervisorDeps } from './reliability/supervisor';
 import { SnapshotLoop } from './snapshot';
 import {
@@ -93,6 +93,14 @@ export class ConfigError extends Error {
     this.transient = transient;
   }
 }
+
+/**
+ * Shown, permanently, when the browser has no Media Source implementation at
+ * all — see {@link SimplerCameraCard._startSupervisor}. iOS < 17.1 is the case
+ * that reaches real users; the message names the way out rather than describing
+ * the failure.
+ */
+const NO_MEDIA_SOURCE_MESSAGE = 'Live view needs MediaSource (iOS 17.1+). Use mode: snapshot.';
 
 /** HA entity ids are `<domain>.<object_id>`, lowercase alphanumeric + `_`. */
 const ENTITY_ID_RE = /^[a-z_]+\.[a-z0-9_]+$/;
@@ -363,6 +371,13 @@ export class SimplerCameraCard extends LitElement {
   /** Milliseconds left in the temporary live window; drives the LIVE pill. */
   @state() private _liveRemainingMs = 0;
 
+  /**
+   * Set by the live preflight when this browser has no Media Source
+   * implementation: the card shows {@link NO_MEDIA_SOURCE_MESSAGE} and nothing
+   * else ever starts. See {@link _startSupervisor}.
+   */
+  @state() private _liveUnsupported = false;
+
   private _hass?: HomeAssistant;
 
   /** The stable media element; see {@link createVideoElement}. Live mode only. */
@@ -597,7 +612,23 @@ export class SimplerCameraCard extends LitElement {
     return config.mode === 'snapshot' && this._temporaryLive ? 'live' : config.mode;
   }
 
+  /**
+   * Build the live stack — unless this browser cannot play MSE at all.
+   *
+   * The preflight sits here, in front of the *only* place a supervisor is ever
+   * constructed, so both routes into live mode (a `mode: live` card and a
+   * `tap_to_live` window) are covered by one check. It is deliberately in the
+   * card rather than the player: no supervisor means no signed URL, no socket
+   * and no retry ladder — retrying could never succeed, and the endless
+   * "Connecting…" that produced this code was exactly that ladder running
+   * against an impossibility. A tap-to-live tap in such a browser shows the
+   * message for the window's duration and then reverts, like any other window.
+   */
   private _startSupervisor(config: NormalizedCardConfig): void {
+    if (!mediaSourceIsAvailable()) {
+      this._liveUnsupported = true;
+      return;
+    }
     const supervisor = new StreamSupervisorImpl({
       createPlayer: (): LivePlayer => new MsePlayer(),
       getHass: () => this._hass,
@@ -648,6 +679,9 @@ export class SimplerCameraCard extends LitElement {
     this._stopPosterRefresh();
     this._streamState = 'idle';
     this._streamDetail = undefined;
+    // Re-asserted by the next start attempt; clearing it here keeps a card that
+    // was switched to `mode: snapshot` from carrying a live-only message.
+    this._liveUnsupported = false;
   }
 
   /**
@@ -976,6 +1010,10 @@ export class SimplerCameraCard extends LitElement {
    * failed (endpoint/config errors arrive as `detail.message`).
    */
   private _statusText(entityExists: boolean): string | undefined {
+    // First, because it outranks everything below it: nothing this card can be
+    // told — a reconnect, a fixed entity id — makes live playback possible in a
+    // browser without MediaSource, and the message says what to do instead.
+    if (this._liveUnsupported) return NO_MEDIA_SOURCE_MESSAGE;
     if (!this._hass) return 'Waiting for Home Assistant…';
     if (!entityExists) return `Entity ${this._config?.camera} not found`;
 
