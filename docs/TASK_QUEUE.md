@@ -21,4 +21,4 @@ How to process/manage the Task Queue:
 
 1. FEATURE_SPEC_tap_to_live.md
    1. Opt-in: tapping a snapshot card temporarily switches to the MSE live stream (`live_duration` window, default 60 s; tap again to revert; LIVE countdown pill).
-   2. Status: [in-progress] — spec created and approved 2026-08-27 ("spec it and go"); implementing (3 serial slices).
+   2. Status: [in-progress] — all 3 slices implemented 2026-08-27 (905def8, c6ec0fe, aea7062). v0.5.0 built and committed; `make check` green (303 tests). Remaining: James installs v0.5.0 and field-tests tap-to-go-live on the kiosk, then acceptance.

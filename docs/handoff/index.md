@@ -4,6 +4,11 @@ This is where a new session looks for handoff information from previous sessions
 
 ## Current
 
+- 2026-08-27 (same session, cont.) — **tap-to-go-live implemented, v0.5.0 awaiting field acceptance.**
+  - FEATURE_SPEC_tap_to_live: spec'd and approved in one step ("spec it and go"), 3 serial slices same day (`905def8` config, `c6ec0fe` runtime, `aea7062` editor/docs/release). 303 unit tests green.
+  - Runtime: `_temporaryLive` flag picks the effective mode; tap toggles engines via existing `_stopEverything()`/`_maybeStart()`; window timer + 1 Hz "LIVE · Ns" pill; reverts on second tap / expiry / hidden / `setConfig` / disconnect. Tap seam: `ActionController` gained opt-in `onTap?: () => boolean` (needed because `action: none` short-circuits before dispatch); `isInteractive()` true for `tap_to_live` snapshot cards.
+  - **Queue now:** FEATURE_SPEC_tap_to_live [in-progress] — implementation done; awaiting James field-testing v0.5.0.
+
 - 2026-08-27 (later session) — **ROOT_SPEC accepted & closed; snapshot mode shipped in v0.4.0 and ACCEPTED** ("snapshot mode works really well" — field-verified; spec done, queue empty). Follow-up: James asked about sub-second intervals (0.5/0.25 s); after discussion he chose to keep the 1 s floor as-is — settled decision, not deferred (rationale: sub-second JPEG polling inverts the mode's resource advantage; go2rtc `fps=` transcode via `stream:` is the answer at 2–4 FPS).
   - James confirmed tap actions + HA-restart recovery in his HA → ROOT_SPEC done and removed from the queue (`e500f72`). First sprint fully complete.
   - New feature, same session: **FEATURE_SPEC_snapshot_mode** — `mode: live|snapshot` + `refresh_interval` (seconds, ≥1, default 5). Discussed → spec'd → approved → implemented in 3 serial slices (`587119d`, `e42a31b`, `e15c04d`). Mechanism: polls the signed poster URL (`resolvePosterUrl`) into a preloaded `<img>`; new `src/snapshot.ts` (`SnapshotLoop` — generation-stamped ticks, overlap guard, pause on hidden, stale pill after 3 consecutive failures); no supervisor/WS/decoder constructed in snapshot mode; live path untouched. Editor fields live in the "Advanced" group. 280 unit tests green.
