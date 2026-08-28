@@ -1,7 +1,7 @@
 # SPEC: Simpler Camera Card
 
 - **Status:** done (accepted 2026-08-27 — field-proven on the 24/7 kiosk; tap actions and HA-restart recovery tested and confirmed by James)
-- **Addenda:** `FEATURE_SPEC_visual_editor.md` (visual config editor via `getConfigForm`); `FEATURE_SPEC_remove_webrtc.md` (removes the WebRTC transport — supersedes this spec's "WebRTC as opt-in low-latency mode" goal and slice 7)
+- **Addenda:** `FEATURE_SPEC_visual_editor.md` (visual config editor via `getConfigForm`); `FEATURE_SPEC_remove_webrtc.md` (removes the WebRTC transport — supersedes this spec's "WebRTC as opt-in low-latency mode" goal and slice 7); `FEATURE_SPEC_snapshot_mode.md` (optional still-image mode with configurable refresh interval — promotes this spec's deferred "Snapshot-refresh transport" item)
 
 ## Summary
 

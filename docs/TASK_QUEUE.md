@@ -19,4 +19,6 @@ How to process/manage the Task Queue:
 
 ## Queue
 
-(empty — ROOT_SPEC accepted 2026-08-27: tap actions and HA-restart recovery tested and confirmed by James; card v0.3.0)
+1. FEATURE_SPEC_snapshot_mode.md
+   1. Optional `mode: snapshot` — still-image view refreshed every `refresh_interval` seconds (down to ~0.25 FPS) for low-resource kiosks.
+   2. Status: spec drafted 2026-08-27 after discussion with James (mechanism = snapshot polling via existing poster resolver; interval in seconds; tap-to-go-live deferred). **Awaiting James's approval of the spec before implementation.**
