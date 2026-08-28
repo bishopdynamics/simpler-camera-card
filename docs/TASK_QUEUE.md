@@ -19,6 +19,4 @@ How to process/manage the Task Queue:
 
 ## Queue
 
-1. ROOT_SPEC.md [in-progress]
-   1. Implement the initial specification.
-   2. Status: ALL 8 slices done (slice 8: cb36f7e), v0.1.0; v0.1.1 (9935dc5) adds the unavailable-entity attribute-cache fix. `make check` green (269 tests) + integration suite green (3 tests vs real go2rtc). Field evidence: 8 days flawless on James's 24/7 kiosk (2 cameras). Remaining before task completion: orchestrator e2e vs real HA+Frigate (visual, tap actions, HA-restart recovery) — needs James's HA reachable — then James's acceptance. (WebRTC soak dropped: task 3 removes WebRTC. Field evidence since: editor verified by James in his HA; 8+ days flawless MSE on the kiosk.)
+(empty — ROOT_SPEC accepted 2026-08-27: tap actions and HA-restart recovery tested and confirmed by James; card v0.3.0)
