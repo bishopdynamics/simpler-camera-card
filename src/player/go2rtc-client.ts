@@ -29,7 +29,7 @@
  *   media staging queue in `mse-player.ts` — it needs no bounds check.
  */
 
-const LOG_PREFIX = '[simpler-camera-card]';
+import { LOG_PREFIX } from '../errors';
 
 /** A go2rtc protocol message. `value` is `type`-dependent and left untyped. */
 export interface Go2rtcMessage {
@@ -76,7 +76,13 @@ export class Go2rtcClient {
   private opened = false;
   private finished = false;
 
-  /** The socket is open; the handshake may proceed. */
+  /**
+   * The socket is open; the handshake may proceed.
+   *
+   * @internal Tests are the only consumer. Production code sends its handshake
+   * through {@link send}, which queues until open — so no owner has ever needed
+   * to wait for this edge itself.
+   */
   onOpen: () => void = () => {};
 
   /**
@@ -291,9 +297,12 @@ export class Go2rtcClient {
     const reason = event?.reason ?? '';
     this.finished = true;
     this.opened = false;
-    this.socket = null;
     this.subscriptions.clear();
     this.outbound.length = 0;
+    // Detach the handlers too, so the invariant `releaseSocket` documents holds
+    // on this path as well: a closed socket is never left carrying live
+    // handlers. `close()` on an already-closed socket is a no-op.
+    this.releaseSocket();
     this.onClose(code, reason);
   }
 

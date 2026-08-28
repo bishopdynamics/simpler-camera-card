@@ -50,9 +50,10 @@ export interface StallWatchdog {
   disarm(): void;
   /** Clear a held stall verdict after a recovery. */
   reset(): void;
-  /** Stop watching and drop all listeners on the current element. */
+  /** Stop watching (implies {@link disarm}) and drop all listeners on the
+   *  current element. The watchdog can be attached and armed again after it. */
   detach(): void;
-  /** Permanent teardown. */
+  /** Permanent teardown: implies {@link detach}, and never watches again. */
   destroy(): void;
 }
 
@@ -157,7 +158,12 @@ export class FrameStallWatchdog implements StallWatchdog {
     return this.stalledFlag;
   }
 
-  /** True when the primary `requestVideoFrameCallback` signal is in use. */
+  /**
+   * True when the primary `requestVideoFrameCallback` signal is in use.
+   *
+   * @internal Nothing in the card branches on it; the watchdog's tests read it
+   * to prove which of the two signals a given element ended up on.
+   */
   get usingFrameCallbacks(): boolean {
     return this.frames !== null;
   }

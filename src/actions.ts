@@ -47,6 +47,7 @@
  * Consumed by: `card.ts` (the only caller).
  */
 
+import type { TimerHandle } from './reliability/retry';
 import type { ActionConfig, NormalizedCardConfig } from './types';
 
 /* -------------------------------------------------------------------------- */
@@ -209,8 +210,6 @@ interface Gesture {
   /** Set when the hold timer fires; makes the release a `hold`, not a `tap`. */
   held: boolean;
 }
-
-type TimerHandle = ReturnType<typeof setTimeout>;
 
 /**
  * Recognises tap / hold / double-tap on one element and fires `hass-action`.

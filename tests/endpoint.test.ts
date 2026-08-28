@@ -47,7 +47,6 @@ function fakeHass(entity: CameraEntity | null = cameraEntity()): HomeAssistant {
   return {
     states: entity ? { [entity.entity_id]: entity } : {},
     connected: true,
-    connection: {} as HomeAssistant['connection'],
     callWS: callWS as unknown as HomeAssistant['callWS'],
   };
 }

@@ -50,7 +50,7 @@
  */
 
 import { EndpointError } from './endpoint';
-import { describeError } from './errors';
+import { LOG_PREFIX, describeError, type Logger } from './errors';
 import { defaultTimers, type TimerApi, type TimerHandle } from './reliability/retry';
 import {
   SNAPSHOT_STALE_AFTER_FAILURES,
@@ -59,14 +59,6 @@ import {
   type HomeAssistant,
   type NormalizedCardConfig,
 } from './types';
-
-/** Prefix on every console line, so field logs are greppable. */
-const LOG_PREFIX = '[simpler-camera-card]';
-
-/** The logging surface used; injectable so tests can assert on it quietly. */
-export interface SnapshotLogger {
-  info(...args: unknown[]): void;
-}
 
 /**
  * Everything the loop needs from the outside world.
@@ -103,7 +95,7 @@ export interface SnapshotLoopDeps {
   /** Injectable timers, shared with the reliability layer's defaults. */
   timers?: TimerApi;
   /** Defaults to the real `console`. */
-  logger?: SnapshotLogger;
+  logger?: Logger;
 }
 
 /**
@@ -115,7 +107,7 @@ export interface SnapshotLoopDeps {
 export class SnapshotLoop {
   private readonly deps: SnapshotLoopDeps;
   private readonly timers: TimerApi;
-  private readonly log: SnapshotLogger;
+  private readonly log: Logger;
   private readonly createImage: () => HTMLImageElement;
 
   /** The repeating tick; `null` while stopped or paused. */
@@ -158,12 +150,22 @@ export class SnapshotLoop {
     this.createImage = deps.createImage ?? ((): HTMLImageElement => new Image());
   }
 
-  /** Consecutive failed polls right now; `0` whenever the last poll worked. */
+  /**
+   * Consecutive failed polls right now; `0` whenever the last poll worked.
+   *
+   * @internal The card learns the count from `onStale`; this getter is for the
+   * loop's own tests.
+   */
   get consecutiveFailures(): number {
     return this.failures;
   }
 
-  /** Whether polling is currently suspended (the dashboard is hidden). */
+  /**
+   * Whether polling is currently suspended (the dashboard is hidden).
+   *
+   * @internal The card owns the pause/resume calls, so it already knows; this
+   * getter is for the loop's own tests.
+   */
   get isPaused(): boolean {
     return this.paused;
   }

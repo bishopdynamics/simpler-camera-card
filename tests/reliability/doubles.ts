@@ -2,8 +2,8 @@
  * Shared test doubles for the reliability layer.
  *
  * The player, the endpoint resolver and the `<video>` element are all mocked
- * here against the frozen contract in `src/types.ts` — this slice never touches
- * a real socket, a real MediaSource, or a real DOM media element.
+ * here against the contract in `src/types.ts`: the reliability layer's tests
+ * never touch a real socket, a real MediaSource, or a real DOM media element.
  */
 
 import type {
@@ -103,6 +103,9 @@ export class FakeWatchdog implements StallWatchdog {
   }
   detach(): void {
     this.detachCount += 1;
+    // The real watchdog disarms as part of detaching; the double must too, or
+    // it would let a supervisor bug through that production would not have.
+    this.disarm();
   }
   destroy(): void {
     this.destroyCount += 1;
@@ -211,7 +214,6 @@ export function fakeHass(): HomeAssistant {
   return {
     states: {},
     connected: true,
-    connection: {} as HomeAssistant['connection'],
     callWS: (async () => ({})) as unknown as HomeAssistant['callWS'],
   };
 }

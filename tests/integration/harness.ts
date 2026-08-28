@@ -85,7 +85,6 @@ const entity: CameraEntity = {
 const hass: HomeAssistant = {
   states: { 'camera.test': entity },
   connected: true,
-  connection: {} as HomeAssistant['connection'],
   callWS: () => Promise.reject(new Error('the harness signs nothing; the resolver is stubbed')),
 };
 

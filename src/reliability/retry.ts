@@ -35,7 +35,7 @@ import {
 export type TimerHandle = ReturnType<typeof globalThis.setTimeout>;
 
 /**
- * The slice of the timer API this layer uses.
+ * The subset of the timer API this layer uses.
  *
  * Injectable so tests can drive time by hand; the default implementation looks
  * the globals up *per call* rather than capturing them at module load, so
@@ -108,7 +108,12 @@ export class ExponentialBackoff {
     this.random = options.random ?? Math.random;
   }
 
-  /** Consecutive failures counted so far. */
+  /**
+   * Consecutive failures counted so far.
+   *
+   * @internal The supervisor reports its own attempt counters; this getter is
+   * here so the backoff's tests can assert the sequence position directly.
+   */
   get attempts(): number {
     return this.failures;
   }
@@ -159,7 +164,12 @@ export class RetryTimer {
     return this.callback !== null;
   }
 
-  /** The delay the pending callback was scheduled with, if any. */
+  /**
+   * The delay the pending callback was scheduled with, if any.
+   *
+   * @internal The supervisor puts the delay it chose straight into
+   * `SupervisorStateDetail`; only the timer's tests read it back from here.
+   */
   get delayMs(): number | undefined {
     return this.pending ? this.scheduledDelayMs : undefined;
   }

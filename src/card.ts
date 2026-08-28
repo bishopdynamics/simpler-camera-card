@@ -36,7 +36,7 @@ import { state } from 'lit/decorators.js';
 import { ActionController, isInteractive } from './actions';
 import { buildConfigForm, type ConfigForm } from './editor';
 import { endpointResolver } from './endpoint';
-import { describeError } from './errors';
+import { LOG_PREFIX, describeError } from './errors';
 import { MsePlayer } from './player/mse-player';
 import { StreamSupervisorImpl, type StreamSupervisorDeps } from './reliability/supervisor';
 import { SnapshotLoop } from './snapshot';
@@ -61,8 +61,6 @@ import {
   type SupervisorStateDetail,
   type ViewMode,
 } from './types';
-
-const LOG_PREFIX = '[simpler-camera-card]';
 
 /* -------------------------------------------------------------------------- */
 /* Config validation                                                           */
@@ -171,7 +169,8 @@ function validateAspectRatio(value: unknown): string {
  * third-party tooling adds more, so strict rejection would break valid
  * dashboards.
  *
- * Exported for tests and for the (future) config editor.
+ * Exported for tests and for the visual editor's fidelity guard (see
+ * `editor.ts`).
  *
  * @throws {ConfigError} with a message written for a human editing YAML
  */
@@ -321,12 +320,14 @@ export class SimplerCameraCard extends LitElement {
   /**
    * Wiring overrides, for tests only.
    *
+   * @internal
+   *
    * Production code never sets this: the card builds the supervisor from the
    * real endpoint resolver and the real player factory. Tests (unit and the
    * go2rtc integration rig) assign it *before* the element is connected to
    * point `endpoint` at a stub resolver — which is how the integration harness
    * injects a bare go2rtc URL without an HA instance, and without touching the
-   * frozen contract in `types.ts`.
+   * shared contract in `types.ts`.
    */
   supervisorOverrides?: Partial<StreamSupervisorDeps>;
 

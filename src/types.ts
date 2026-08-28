@@ -11,17 +11,17 @@
  * - **Types and constants only.** No runtime behaviour beyond `const` values.
  *   Everything here is imported by every other module; it must have no
  *   dependencies of its own beyond type-only imports.
- * - **Every interface documents who implements it and who consumes it.**
- *   Modules are built in parallel against these declarations, so an
- *   under-specified shape becomes a merge conflict later.
- * - **Frozen.** Later slices implement against this file rather than editing
- *   it. Treat it as a published API.
+ * - **Every interface documents who implements it and who consumes it**, so a
+ *   reader can follow a shape to both of its ends without grepping.
+ * - **Stable by default.** Every module in the card is written against these
+ *   declarations, so changing one is a cross-cutting change: prefer
+ *   implementing against the shape here to widening it.
  *
  * Type-only imports from `home-assistant-js-websocket` are safe: the package is
  * a devDependency and never appears in the shipped bundle.
  */
 
-import type { Connection, MessageBase } from 'home-assistant-js-websocket';
+import type { MessageBase } from 'home-assistant-js-websocket';
 
 /* -------------------------------------------------------------------------- */
 /* Card identity                                                               */
@@ -80,8 +80,6 @@ export interface CameraEntity {
 export interface HomeAssistant {
   /** Entity registry snapshot; a new object arrives on every state change. */
   states: Record<string, CameraEntity>;
-  /** Live websocket connection (used for subscriptions, not for `callWS`). */
-  connection: Connection;
   /**
    * Whether the HA websocket is currently up. The false -> true edge is one of
    * the six reconnect triggers (see {@link DeathReason}).
@@ -129,7 +127,7 @@ export interface ActionConfirmationConfig {
  * Unknown keys are permitted so future HA action options pass through
  * untouched.
  *
- * Consumed by: `card.ts` / `actions.ts` (slice 6).
+ * Consumed by: `card.ts` / `actions.ts`.
  */
 export interface ActionConfig {
   action: ActionName;
@@ -296,7 +294,7 @@ export interface NormalizedCardConfig extends SimplerCameraCardConfig {
   live_duration: number;
 }
 
-/** Defaults applied by `normalizeConfig()`. Exported so tests assert on them. */
+/** Defaults applied by `normalizeConfig()`. */
 export const CONFIG_DEFAULTS = {
   overlay: 'none' as OverlayMode,
   aspectRatio: '16 / 9',
@@ -355,9 +353,9 @@ export type DeathReason =
  * makes tier-2 recovery a clean "replace the whole player" operation and keeps
  * every player free of internal retry logic.
  *
- * Implemented by: `player/mse-player.ts` (slice 3).
- * Consumed by: `reliability/supervisor.ts` (slice 4) — nothing else constructs
- * or drives a player.
+ * Implemented by: `player/mse-player.ts`.
+ * Consumed by: `reliability/supervisor.ts` — nothing else constructs or drives
+ * a player.
  */
 export interface LivePlayer {
   /**
@@ -401,7 +399,7 @@ export interface LivePlayer {
  * Exists so the supervisor never imports a concrete player module (which keeps
  * the supervisor's tests free of MSE plumbing and lets them inject fakes).
  *
- * Implemented by: `card.ts` (slice 5). Consumed by: the supervisor.
+ * Implemented by: `card.ts`. Consumed by: the supervisor.
  */
 export type PlayerFactory = () => LivePlayer;
 
@@ -427,15 +425,22 @@ export type PlayerFactory = () => LivePlayer;
  */
 export type SupervisorState = 'idle' | 'connecting' | 'playing' | 'retrying' | 'remounting';
 
-/** Optional context for a state change, used by the card's status indicator. */
+/**
+ * Optional context for a state change.
+ *
+ * The card renders exactly two of these — {@link SupervisorStateDetail.message}
+ * and {@link SupervisorStateDetail.delayMs} — in its status indicator. The rest
+ * are diagnostics: they describe the supervisor's own retry bookkeeping, and
+ * the supervisor's tests pin them, which is what keeps the retry ladder honest.
+ */
 export interface SupervisorStateDetail {
-  /** Why the previous attempt died (absent on the first `connecting`). */
+  /** Diagnostic: why the previous attempt died (absent on the first `connecting`). */
   reason?: DeathReason;
-  /** 1-based attempt counter within the current tier. */
+  /** Diagnostic: 1-based attempt counter within the current tier. */
   attempt?: number;
   /** Milliseconds until the next attempt (tier-1 delay or tier-2 backoff). */
   delayMs?: number;
-  /** Milliseconds since the stream was last `playing`, for the escape hatch. */
+  /** Diagnostic: milliseconds since the stream was last `playing`. */
   downForMs?: number;
   /** Human-readable detail (e.g. an endpoint/config error message). */
   message?: string;
@@ -457,8 +462,8 @@ export type SupervisorExternalEvent =
  * Owns the connection state machine: player lifecycle, the watchdog, both retry
  * tiers, and every reconnect trigger. Retries forever — kiosk semantics.
  *
- * Implemented by: `reliability/supervisor.ts` (slice 4).
- * Consumed by: `card.ts` (slice 5).
+ * Implemented by: `reliability/supervisor.ts`.
+ * Consumed by: `card.ts`.
  */
 export interface StreamSupervisor {
   /** Enter `connecting` and begin the first attempt. No-op if already started. */
@@ -526,7 +531,7 @@ export const POSTER_REFRESH_INTERVAL_MS = 10_000;
  * indicator. Below the threshold a dropped poll is silent — the last good frame
  * simply stays up — so one blip never flashes a warning on a kiosk.
  *
- * Consumed by: `snapshot.ts` / `card.ts` (a later slice) and their tests.
+ * Consumed by: `snapshot.ts` and its tests.
  */
 export const SNAPSHOT_STALE_AFTER_FAILURES = 3;
 
@@ -543,9 +548,10 @@ export const SNAPSHOT_STALE_AFTER_FAILURES = 3;
 export const SNAPSHOT_TICK_TIMEOUT_FLOOR_MS = 10_000;
 
 /**
- * Tap-to-go-live: minimum allowed `live_duration`, in seconds. Used by config
- * validation now; the editor and the card's window timer consume it in a
- * later slice.
+ * Tap-to-go-live: minimum allowed `live_duration`, in seconds.
+ *
+ * Consumed by: `card.ts` (config validation) and `editor.ts` (the slider's
+ * lower bound), so the form can never offer a value the card would reject.
  */
 export const LIVE_DURATION_MIN_S = 5;
 

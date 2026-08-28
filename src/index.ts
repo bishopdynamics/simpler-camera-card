@@ -9,8 +9,13 @@ import { CARD_TAG } from './types';
 
 export const CARD_VERSION = '0.6.4';
 
+// The bundle's public surface, listed rather than re-exported wholesale: the
+// card is loaded for its side effect, so anything named here exists for a
+// reader (or a test) reaching in deliberately, not for `types.ts` to grow an
+// export by accident.
 export { SimplerCameraCard, normalizeConfig } from './card';
-export * from './types';
+export { CARD_TAG, CARD_TYPE } from './types';
+export type { NormalizedCardConfig, SimplerCameraCardConfig } from './types';
 
 window.customCards = window.customCards ?? [];
 if (!window.customCards.some((card) => card.type === CARD_TAG)) {

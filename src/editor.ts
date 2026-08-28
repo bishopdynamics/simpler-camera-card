@@ -44,7 +44,7 @@
  * drive the guard with a stub.
  */
 
-import { OVERLAY_MODES, VIEW_MODES } from './types';
+import { LIVE_DURATION_MIN_S, OVERLAY_MODES, VIEW_MODES } from './types';
 
 /* -------------------------------------------------------------------------- */
 /* Local mirror of HA's form types                                             */
@@ -98,7 +98,7 @@ export function isConfigFormGroup(node: ConfigFormNode): node is ConfigFormGroup
 /* -------------------------------------------------------------------------- */
 
 /*
- * Dropdown options are derived from the frozen constants in `types.ts` at
+ * Dropdown options are derived from the enum constants in `types.ts` at
  * module load, so the editor can never offer a value `normalizeConfig` would
  * reject (or miss one it would accept). Only the human-facing text lives here,
  * with a title-cased fallback so a new enum value still renders sanely.
@@ -155,7 +155,20 @@ const SCHEMA: readonly ConfigFormNode[] = [
     // replaced: typing "10" there emitted `1` after the first keystroke, which
     // `normalizeConfig` then rejected (min 5) and HA dropped to the YAML
     // editor. `mode: 'slider'` sidesteps the whole class of bug.
-    selector: { number: { min: 5, max: 60, step: 5, mode: 'slider', unit_of_measurement: 's' } },
+    //
+    // `min` is the card's own floor, so the slider can never emit a value
+    // `normalizeConfig` rejects. `max` and `step` are the editor's policy alone
+    // — YAML accepts longer and fractional windows; the slider just does not
+    // offer them.
+    selector: {
+      number: {
+        min: LIVE_DURATION_MIN_S,
+        max: 60,
+        step: 5,
+        mode: 'slider',
+        unit_of_measurement: 's',
+      },
+    },
   },
   { name: 'overlay', selector: { select: { mode: 'dropdown', options: OVERLAY_OPTIONS } } },
   { name: 'overlay_text', selector: { text: {} } },

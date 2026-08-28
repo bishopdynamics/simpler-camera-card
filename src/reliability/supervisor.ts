@@ -25,7 +25,7 @@
  * - **Stale callbacks are ignored.** Every player is stamped with a generation;
  *   callbacks from a superseded player are dropped rather than trusted.
  *
- * ## Wiring (slice 5)
+ * ## Wiring
  *
  * ```ts
  * const supervisor = new StreamSupervisorImpl({
@@ -43,7 +43,7 @@
  * production-correct default.
  */
 
-import { describeError } from '../errors';
+import { LOG_PREFIX, describeError, type Logger } from '../errors';
 import {
   HIDDEN_TEARDOWN_GRACE_MS,
   TIER1_MAX_RETRIES,
@@ -68,18 +68,10 @@ import {
 } from './retry';
 import { FrameStallWatchdog, type StallWatchdog, type WatchdogOptions } from './watchdog';
 
-/** Prefix on every console line, so field logs are greppable. */
-const LOG_PREFIX = '[simpler-camera-card]';
-
-/** The logging surface used; injectable so tests can assert on it quietly. */
-export interface SupervisorLogger {
-  info(...args: unknown[]): void;
-}
-
 /**
  * Everything the supervisor needs from the outside world.
  *
- * The first five fields are the real wiring (slice 5 supplies them); the rest
+ * The first five fields are the real wiring, supplied by `card.ts`; the rest
  * are seams with production defaults. `getHass` / `getVideo` / `getConfig` are
  * *getters* rather than values because all three legitimately change while the
  * card lives: Home Assistant hands over a new `hass` object on every state
@@ -115,7 +107,7 @@ export interface StreamSupervisorDeps {
   /** Injectable timers, shared with the watchdog. */
   timers?: TimerApi;
   /** Defaults to the real `console`. */
-  logger?: SupervisorLogger;
+  logger?: Logger;
 }
 
 /** Carried from a failed attempt into the next one, for `SupervisorStateDetail`. */
@@ -145,7 +137,7 @@ export class StreamSupervisorImpl implements StreamSupervisor {
   onStateChange: (state: SupervisorState, detail?: SupervisorStateDetail) => void = () => {};
 
   private readonly deps: StreamSupervisorDeps;
-  private readonly log: SupervisorLogger;
+  private readonly log: Logger;
   private readonly now: () => number;
   private readonly reloadPage: () => void;
   private readonly backoff: ExponentialBackoff;
@@ -201,7 +193,12 @@ export class StreamSupervisorImpl implements StreamSupervisor {
       : new FrameStallWatchdog(watchdogOptions);
   }
 
-  /** Current state; the same value the last `onStateChange` reported. */
+  /**
+   * Current state; the same value the last `onStateChange` reported.
+   *
+   * @internal The card tracks state through `onStateChange`; this getter exists
+   * for the supervisor's own tests to assert on without a callback.
+   */
   get state(): SupervisorState {
     return this.currentState;
   }
@@ -228,7 +225,9 @@ export class StreamSupervisorImpl implements StreamSupervisor {
     this.retryTimer.cancel();
     this.escapeTimer.cancel();
     this.teardownPlayer();
-    this.watchdog.disarm();
+    // `detach()` disarms as part of its contract, so it is the whole teardown.
+    // Deliberately not `destroy()`: `start()` may legitimately follow a
+    // `stop()`, and a destroyed watchdog never watches again.
     this.watchdog.detach();
 
     this.started = false;

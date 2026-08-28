@@ -79,7 +79,6 @@ function fakeHass(): HomeAssistant {
   return {
     states: {},
     connected: true,
-    connection: {} as HomeAssistant['connection'],
     callWS: (async () => ({})) as unknown as HomeAssistant['callWS'],
   };
 }

@@ -53,10 +53,9 @@
  * covers connected-but-frozen streams at the element level.
  */
 
+import { LOG_PREFIX, describeError } from '../errors';
 import { HANDSHAKE_TIMEOUT_MS, type DeathReason, type LivePlayer } from '../types';
 import { Go2rtcClient, type Go2rtcMessage, type WebSocketConstructor } from './go2rtc-client';
-
-const LOG_PREFIX = '[simpler-camera-card]';
 
 /**
  * Codecs offered to go2rtc, filtered by `MediaSource.isTypeSupported` before
@@ -65,7 +64,7 @@ const LOG_PREFIX = '[simpler-camera-card]';
  * Audio codecs are offered even though v1 plays muted — the stream may be
  * multiplexed, and refusing its audio track would refuse the stream.
  */
-export const MSE_CANDIDATE_CODECS: readonly string[] = [
+const MSE_CANDIDATE_CODECS: readonly string[] = [
   'avc1.640029', // H.264 High @ L4.1
   'avc1.64002A', // H.264 High @ L4.2
   'avc1.640033', // H.264 High @ L5.1
@@ -253,7 +252,10 @@ export class MsePlayer implements LivePlayer {
     try {
       mediaSource = new mediaSourceImpl();
     } catch (error) {
-      this.die('media-error', `MediaSource could not be created: ${describe(error)}`);
+      this.die(
+        'media-error',
+        `MediaSource could not be created: ${describeError(error, { withName: true })}`,
+      );
       return false;
     }
     this.mediaSource = mediaSource;
@@ -263,7 +265,10 @@ export class MsePlayer implements LivePlayer {
       this.objectUrl = URL.createObjectURL(mediaSource);
       video.src = this.objectUrl;
     } catch (error) {
-      this.die('media-error', `MediaSource could not be attached: ${describe(error)}`);
+      this.die(
+        'media-error',
+        `MediaSource could not be attached: ${describeError(error, { withName: true })}`,
+      );
       return false;
     }
     return true;
@@ -302,7 +307,10 @@ export class MsePlayer implements LivePlayer {
       // go2rtc sends independently timestamped fragments, not a sequence.
       sourceBuffer.mode = 'segments';
     } catch (error) {
-      this.die('media-error', `addSourceBuffer("${mime}") failed: ${describe(error)}`);
+      this.die(
+        'media-error',
+        `addSourceBuffer("${mime}") failed: ${describeError(error, { withName: true })}`,
+      );
       return;
     }
     sourceBuffer.addEventListener('updateend', this.handleUpdateEnd);
@@ -375,7 +383,7 @@ export class MsePlayer implements LivePlayer {
       // Never swallowed: a QuotaExceededError here is precisely the failure
       // that leaves upstream stalled forever on a live socket.
       console.info(`${LOG_PREFIX} appendBuffer failed:`, error);
-      this.die('media-error', `appendBuffer failed: ${describe(error)}`);
+      this.die('media-error', `appendBuffer failed: ${describeError(error, { withName: true })}`);
     }
   }
 
@@ -626,15 +634,11 @@ export function supportedCodecs(mediaSourceImpl: MediaSourceConstructor): string
  * parked exactly on the end of a range is waiting for the next fragment, which
  * is ordinary live playback, not a discontinuity.
  */
-export function rangeContaining(buffered: TimeRanges, time: number): number | null {
+function rangeContaining(buffered: TimeRanges, time: number): number | null {
   for (let index = 0; index < buffered.length; index += 1) {
     if (time >= buffered.start(index) && time <= buffered.end(index)) return index;
   }
   return null;
-}
-
-function describe(error: unknown): string {
-  return error instanceof Error ? `${error.name}: ${error.message}` : String(error);
 }
 
 function quietly(action: () => void): void {

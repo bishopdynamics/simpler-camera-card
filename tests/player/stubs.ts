@@ -1,5 +1,5 @@
 /**
- * Test doubles for the browser APIs the player slice drives.
+ * Test doubles for the browser APIs the player drives.
  *
  * happy-dom implements neither `WebSocket` server behaviour nor Media Source
  * Extensions, and both are injectable into `MsePlayer` / `Go2rtcClient`

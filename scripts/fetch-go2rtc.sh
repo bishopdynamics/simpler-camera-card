@@ -118,7 +118,7 @@ fi
 mkdir -p "$tools_dir"
 tmp="$target.download.$$"
 unpacked="$target.unpacked.$$"
-# Plain rm, guarded: forced rm is disallowed by this project's environment rules.
+# Existence-guarded plain rm, so no `rm -f` is needed to make cleanup quiet.
 cleanup() {
 	[ ! -e "$tmp" ] || rm "$tmp"
 	[ ! -e "$unpacked" ] || rm "$unpacked"

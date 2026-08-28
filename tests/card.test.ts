@@ -33,7 +33,6 @@ function fakeHass(...entities: CameraEntity[]): HomeAssistant {
   return {
     states: Object.fromEntries(entities.map((e) => [e.entity_id, e])),
     connected: true,
-    connection: {} as HomeAssistant['connection'],
     callWS: async () => ({}) as never,
   };
 }

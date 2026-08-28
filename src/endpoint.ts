@@ -98,7 +98,7 @@ function nonEmptyString(value: unknown): string | undefined {
  *
  * @throws {EndpointError} `entity-not-found` when it is absent from `hass.states`.
  */
-export function getCameraEntity(hass: HomeAssistant, entityId: string): CameraEntity {
+function getCameraEntity(hass: HomeAssistant, entityId: string): CameraEntity {
   const entity = hass.states?.[entityId];
   if (!entity) {
     throw new EndpointError(
@@ -227,6 +227,27 @@ export async function signPath(
 }
 
 /**
+ * Resolve a (signed) path against the page origin, refusing anything that lands
+ * elsewhere.
+ *
+ * Belt-and-braces: `signPath` already rejects a path *shaped* to resolve
+ * off-origin, but this is the last line of defence before the URL reaches a
+ * `WebSocket` or a `fetch` — a second, independent check of the same
+ * same-origin invariant the module header promises. `refusal` names what is
+ * about to be done with the URL, so the thrown message says which door was
+ * being held.
+ *
+ * @throws {EndpointError} `sign-failed`
+ */
+function sameOriginUrl(path: string, base: Location | URL, refusal: string): URL {
+  const url = new URL(path, base.href);
+  if (url.host !== new URL(base.href).host) {
+    throw new EndpointError('sign-failed', `${refusal}: "${url.toString()}".`);
+  }
+  return url;
+}
+
+/**
  * Turn a (signed) same-origin path into an absolute `ws://` / `wss://` URL.
  *
  * The card is always served by HA itself, so the page origin is the right
@@ -234,34 +255,14 @@ export async function signPath(
  * socket.
  */
 export function toAbsoluteWsUrl(path: string, base: Location | URL = location): string {
-  const url = new URL(path, base.href);
-  // Belt-and-braces: `signPath` already rejects a path shaped to resolve
-  // off-origin, but this is the last line of defence before the URL is
-  // handed to `WebSocket` — a second, independent check of the same
-  // same-origin invariant the module header promises.
-  if (url.host !== new URL(base.href).host) {
-    throw new EndpointError(
-      'sign-failed',
-      `Refusing to open a websocket to an off-origin URL: "${url.toString()}".`,
-    );
-  }
+  const url = sameOriginUrl(path, base, 'Refusing to open a websocket to an off-origin URL');
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
   return url.toString();
 }
 
 /** Turn a (signed) same-origin path into an absolute `http(s)://` URL. */
 export function toAbsoluteHttpUrl(path: string, base: Location | URL = location): string {
-  const url = new URL(path, base.href);
-  // Belt-and-braces: see the matching check in `toAbsoluteWsUrl` above — this
-  // is the same independent same-origin assertion for the HTTP(S) path (used
-  // for poster/snapshot URLs).
-  if (url.host !== new URL(base.href).host) {
-    throw new EndpointError(
-      'sign-failed',
-      `Refusing to fetch an off-origin URL: "${url.toString()}".`,
-    );
-  }
-  return url.toString();
+  return sameOriginUrl(path, base, 'Refusing to fetch an off-origin URL').toString();
 }
 
 /**
