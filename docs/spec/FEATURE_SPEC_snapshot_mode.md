@@ -64,3 +64,4 @@ Verification per slice: `make check` (lint, typecheck, vitest, build). Post-merg
 ## Change Log
 
 - 2026-08-27 — created from discussion with James (snapshot mechanism confirmed; interval-in-seconds confirmed; tap-to-go-live deferred). Promotes ROOT_SPEC deferred item "Snapshot-refresh transport".
+- 2026-08-27 — approved by James; all 3 slices implemented same day (v0.4.0). Editor fields placed in the "Advanced" group. Awaiting field acceptance.
