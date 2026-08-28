@@ -206,6 +206,22 @@ export async function signPath(
   if (!response || typeof response.path !== 'string' || response.path === '') {
     throw new EndpointError('sign-failed', `Home Assistant returned no signed path for "${path}".`);
   }
+  // Enforce the module's own invariant (see header): everything the card
+  // connects to must stay on HA's own origin. A single leading slash not
+  // followed by another slash or a backslash is the only shape `new URL(x,
+  // location.href)` is guaranteed to resolve on-origin — `//host/x` is
+  // protocol-relative, `/\host/x` is treated as `//host/x` by some URL
+  // parsers, and an absolute URL carries its own origin outright. A hostile
+  // or compromised HA (or a MITM on plaintext HA) could otherwise answer
+  // `auth/sign_path` with an off-origin URL and have the card open its
+  // go2rtc websocket, or fetch a poster, from an attacker.
+  if (!/^\/[^/\\]/.test(response.path)) {
+    throw new EndpointError(
+      'sign-failed',
+      `Home Assistant returned a signed path for "${path}" that is not a ` +
+        `same-origin absolute path: "${response.path}".`,
+    );
+  }
   return response.path;
 }
 
@@ -218,13 +234,33 @@ export async function signPath(
  */
 export function toAbsoluteWsUrl(path: string, base: Location | URL = location): string {
   const url = new URL(path, base.href);
+  // Belt-and-braces: `signPath` already rejects a path shaped to resolve
+  // off-origin, but this is the last line of defence before the URL is
+  // handed to `WebSocket` — a second, independent check of the same
+  // same-origin invariant the module header promises.
+  if (url.host !== new URL(base.href).host) {
+    throw new EndpointError(
+      'sign-failed',
+      `Refusing to open a websocket to an off-origin URL: "${url.toString()}".`,
+    );
+  }
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
   return url.toString();
 }
 
 /** Turn a (signed) same-origin path into an absolute `http(s)://` URL. */
 export function toAbsoluteHttpUrl(path: string, base: Location | URL = location): string {
-  return new URL(path, base.href).toString();
+  const url = new URL(path, base.href);
+  // Belt-and-braces: see the matching check in `toAbsoluteWsUrl` above — this
+  // is the same independent same-origin assertion for the HTTP(S) path (used
+  // for poster/snapshot URLs).
+  if (url.host !== new URL(base.href).host) {
+    throw new EndpointError(
+      'sign-failed',
+      `Refusing to fetch an off-origin URL: "${url.toString()}".`,
+    );
+  }
+  return url.toString();
 }
 
 /**

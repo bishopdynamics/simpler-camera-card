@@ -50,6 +50,7 @@ import {
   VIEW_MODES,
   type ActionConfig,
   type ActionName,
+  type CameraEntity,
   type EndpointResolver,
   type HomeAssistant,
   type LivePlayer,
@@ -883,7 +884,7 @@ export class SimplerCameraCard extends LitElement {
     // reaches this expression).
     const poster = showingMedia
       ? undefined
-      : (this._posterUrl ?? this._snapshotUrl ?? entity?.attributes?.entity_picture);
+      : (this._posterUrl ?? this._snapshotUrl ?? sameOriginPosterFallback(entity));
     // The one media layer: the stable `<video>` in live mode, a plain refreshing
     // `<img>` in snapshot mode (nothing external holds a reference to it, so it
     // needs none of the video element's node-value stability).
@@ -1077,6 +1078,26 @@ export class SimplerCameraCard extends LitElement {
       pointer-events: none;
     }
   `;
+}
+
+/**
+ * The entity's raw `entity_picture`, when it is same-origin — else `undefined`.
+ *
+ * `entity_picture` is attacker-controlled: any integration on the HA instance
+ * can set it, not just the Frigate one this card targets. HA's camera
+ * platform only ever emits a relative path (`/api/camera_proxy/...`), so
+ * accepting anything else would let a hostile integration plant an
+ * off-origin URL as a per-view tracking beacon rendered straight into
+ * `<img src>`. `//host/...` is protocol-relative (off-origin), so a lone
+ * leading slash not followed by another slash is required. This is unrelated
+ * to the `_posterUrl`/`_snapshotUrl` fields, which are signed absolute URLs
+ * this card's own resolver produced and are never filtered.
+ */
+function sameOriginPosterFallback(entity: CameraEntity | undefined): string | undefined {
+  const picture = entity?.attributes?.entity_picture;
+  // `[^/\\]` and not just `[^/]`: browsers fold `\` into `/` when resolving
+  // URLs, so `/\evil.com/x` is protocol-relative too.
+  return typeof picture === 'string' && /^\/[^/\\]/.test(picture) ? picture : undefined;
 }
 
 /** Best-effort human-readable text for anything that was thrown or rejected. */

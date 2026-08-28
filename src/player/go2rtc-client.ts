@@ -123,7 +123,13 @@ export class Go2rtcClient {
     try {
       socket = new this.webSocketImpl(this.url);
     } catch (error) {
-      console.info(`${LOG_PREFIX} go2rtc websocket could not be created:`, error);
+      // Log only the error's name/type, not the error object: Chromium's
+      // `SyntaxError` for a malformed WebSocket URL embeds the full URL text in
+      // its message, and that URL carries the signed `authSig` query param.
+      console.info(
+        `${LOG_PREFIX} go2rtc websocket could not be created:`,
+        error instanceof Error ? error.name : String(error),
+      );
       this.finished = true;
       this.onError();
       return;

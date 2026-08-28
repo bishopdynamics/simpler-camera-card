@@ -881,14 +881,18 @@ async function ft(e, t, n = 300) {
 		throw new B("sign-failed", `Home Assistant refused to sign "${t}": ${vt(e)}`, { cause: e });
 	}
 	if (!r || typeof r.path != "string" || r.path === "") throw new B("sign-failed", `Home Assistant returned no signed path for "${t}".`);
+	if (!/^\/[^/\\]/.test(r.path)) throw new B("sign-failed", `Home Assistant returned a signed path for "${t}" that is not a same-origin absolute path: "${r.path}".`);
 	return r.path;
 }
 function pt(e, t = location) {
 	let n = new URL(e, t.href);
+	if (n.host !== new URL(t.href).host) throw new B("sign-failed", `Refusing to open a websocket to an off-origin URL: "${n.toString()}".`);
 	return n.protocol = n.protocol === "https:" ? "wss:" : "ws:", n.toString();
 }
 function mt(e, t = location) {
-	return new URL(e, t.href).toString();
+	let n = new URL(e, t.href);
+	if (n.host !== new URL(t.href).host) throw new B("sign-failed", `Refusing to fetch an off-origin URL: "${n.toString()}".`);
+	return n.toString();
 }
 async function ht(e, t) {
 	return pt(await ft(e, ut(e, t)));
@@ -921,7 +925,7 @@ var H = "[simpler-camera-card]", yt = class {
 		try {
 			e = new this.webSocketImpl(this.url);
 		} catch (e) {
-			console.info(`${H} go2rtc websocket could not be created:`, e), this.finished = !0, this.onError();
+			console.info(`${H} go2rtc websocket could not be created:`, e instanceof Error ? e.name : String(e)), this.finished = !0, this.onError();
 			return;
 		}
 		e.binaryType = "arraybuffer", e.onopen = () => this.handleOpen(), e.onmessage = (e) => this.handleMessage(e), e.onclose = (e) => this.handleClose(e), e.onerror = () => this.handleError(), this.socket = e;
@@ -1820,7 +1824,7 @@ var Q = class extends M {
 				this._snapshotStale = !0;
 			},
 			onEndpointError: (e) => {
-				this._snapshotError = Ut(e);
+				this._snapshotError = Wt(e);
 			}
 		});
 		this._snapshot = t, t.start(), document.visibilityState === "hidden" && t.pause();
@@ -1901,7 +1905,7 @@ var Q = class extends M {
 	render() {
 		let e = this._config;
 		if (!e) return T;
-		let t = this._effectiveMode === "snapshot", n = this._hass?.states?.[e.camera], r = t ? this._snapshotUrl !== void 0 : this._streamState === "playing", i = r ? void 0 : this._posterUrl ?? this._snapshotUrl ?? n?.attributes?.entity_picture, a = t ? this._snapshotUrl === void 0 ? T : C`<img class="snapshot" src=${this._snapshotUrl} alt="" aria-hidden="true" />` : this._video, o = this._overlayText(e, n?.attributes?.friendly_name), s = t ? this._snapshotStatusText(!!n) : this._temporaryLive && this._streamState === "playing" ? `LIVE · ${Math.ceil(this._liveRemainingMs / 1e3)}s` : r ? void 0 : this._statusText(!!n), c = ze(e), l = n?.attributes?.friendly_name ?? e.camera, u = e.mode === "snapshot" && e.tap_to_live ? `${l} — ${this._temporaryLive ? "back to snapshots" : "go live"}` : l;
+		let t = this._effectiveMode === "snapshot", n = this._hass?.states?.[e.camera], r = t ? this._snapshotUrl !== void 0 : this._streamState === "playing", i = r ? void 0 : this._posterUrl ?? this._snapshotUrl ?? Ut(n), a = t ? this._snapshotUrl === void 0 ? T : C`<img class="snapshot" src=${this._snapshotUrl} alt="" aria-hidden="true" />` : this._video, o = this._overlayText(e, n?.attributes?.friendly_name), s = t ? this._snapshotStatusText(!!n) : this._temporaryLive && this._streamState === "playing" ? `LIVE · ${Math.ceil(this._liveRemainingMs / 1e3)}s` : r ? void 0 : this._statusText(!!n), c = ze(e), l = n?.attributes?.friendly_name ?? e.camera, u = e.mode === "snapshot" && e.tap_to_live ? `${l} — ${this._temporaryLive ? "back to snapshots" : "go live"}` : l;
 		return C`
       <ha-card>
         <div
@@ -1933,7 +1937,7 @@ var Q = class extends M {
 			case "playing": return;
 			case "connecting": return $("Connecting…", t?.message);
 			case "retrying":
-			case "remounting": return $(`Reconnecting${Wt(t?.delayMs)}…`, t?.message);
+			case "remounting": return $(`Reconnecting${Gt(t?.delayMs)}…`, t?.message);
 			default: return t?.message ?? "Not connected";
 		}
 	}
@@ -2044,9 +2048,13 @@ var Q = class extends M {
 };
 Y([N()], Q.prototype, "_config", void 0), Y([N()], Q.prototype, "_streamState", void 0), Y([N()], Q.prototype, "_streamDetail", void 0), Y([N()], Q.prototype, "_posterUrl", void 0), Y([N()], Q.prototype, "_snapshotUrl", void 0), Y([N()], Q.prototype, "_snapshotStale", void 0), Y([N()], Q.prototype, "_snapshotError", void 0), Y([N()], Q.prototype, "_temporaryLive", void 0), Y([N()], Q.prototype, "_liveRemainingMs", void 0);
 function Ut(e) {
-	return e instanceof Error ? e.message : typeof e == "string" ? e : e && typeof e == "object" && "message" in e ? String(e.message) : String(e);
+	let t = e?.attributes?.entity_picture;
+	return typeof t == "string" && /^\/[^/\\]/.test(t) ? t : void 0;
 }
 function Wt(e) {
+	return e instanceof Error ? e.message : typeof e == "string" ? e : e && typeof e == "object" && "message" in e ? String(e.message) : String(e);
+}
+function Gt(e) {
 	return typeof e != "number" || !Number.isFinite(e) || e <= 0 ? "" : e < 1e3 ? " shortly" : ` in ${Math.round(e / 1e3)} s`;
 }
 function $(e, t) {
@@ -2055,15 +2063,15 @@ function $(e, t) {
 customElements.get("simpler-camera-card") || customElements.define(P, Q);
 //#endregion
 //#region src/index.ts
-var Gt = "0.6.2";
+var Kt = "0.6.3";
 window.customCards = window.customCards ?? [], window.customCards.some((e) => e.type === "simpler-camera-card") || window.customCards.push({
 	type: P,
 	name: "Simpler Camera Card",
 	description: "Single-camera Frigate live view via go2rtc, built to recover from network blips on long-running dashboards.",
 	preview: !1,
 	documentationURL: "https://git.bishopdynamics.com/claude/simpler-camera-card"
-}), console.info(`%c SIMPLER-CAMERA-CARD %c v${Gt} `, "color: white; background: #039be5; font-weight: 700;", "color: #039be5; background: white; font-weight: 700;");
+}), console.info(`%c SIMPLER-CAMERA-CARD %c v${Kt} `, "color: white; background: #039be5; font-weight: 700;", "color: #039be5; background: white; font-weight: 700;");
 //#endregion
-export { I as ACTION_NAMES, P as CARD_TAG, F as CARD_TYPE, Gt as CARD_VERSION, z as CONFIG_DEFAULTS, Ye as HANDSHAKE_TIMEOUT_MS, Xe as HIDDEN_TEARDOWN_GRACE_MS, $e as LIVE_DURATION_MIN_S, L as OVERLAY_MODES, Ze as POSTER_REFRESH_INTERVAL_MS, Ue as REMOUNT_BACKOFF_BASE_MS, Ge as REMOUNT_BACKOFF_CAP_MS, We as REMOUNT_BACKOFF_FACTOR, qe as REMOUNT_BACKOFF_JITTER_MAX, Ke as REMOUNT_BACKOFF_JITTER_MIN, Qe as SNAPSHOT_STALE_AFTER_FAILURES, Q as SimplerCameraCard, Ve as TIER1_MAX_RETRIES, He as TIER1_RETRY_DELAY_MS, R as VIEW_MODES, Je as WATCHDOG_STALL_TIMEOUT_MS, Z as normalizeConfig };
+export { I as ACTION_NAMES, P as CARD_TAG, F as CARD_TYPE, Kt as CARD_VERSION, z as CONFIG_DEFAULTS, Ye as HANDSHAKE_TIMEOUT_MS, Xe as HIDDEN_TEARDOWN_GRACE_MS, $e as LIVE_DURATION_MIN_S, L as OVERLAY_MODES, Ze as POSTER_REFRESH_INTERVAL_MS, Ue as REMOUNT_BACKOFF_BASE_MS, Ge as REMOUNT_BACKOFF_CAP_MS, We as REMOUNT_BACKOFF_FACTOR, qe as REMOUNT_BACKOFF_JITTER_MAX, Ke as REMOUNT_BACKOFF_JITTER_MIN, Qe as SNAPSHOT_STALE_AFTER_FAILURES, Q as SimplerCameraCard, Ve as TIER1_MAX_RETRIES, He as TIER1_RETRY_DELAY_MS, R as VIEW_MODES, Je as WATCHDOG_STALL_TIMEOUT_MS, Z as normalizeConfig };
 
 //# sourceMappingURL=simpler-camera-card.js.map

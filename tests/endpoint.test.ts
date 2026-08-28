@@ -9,6 +9,7 @@ import {
   resolvePosterUrl,
   resolveSignedWsUrl,
   signPath,
+  toAbsoluteHttpUrl,
   toAbsoluteWsUrl,
 } from '../src/endpoint';
 import type { CameraEntity, HomeAssistant, SimplerCameraCardConfig } from '../src/types';
@@ -221,6 +222,30 @@ describe('signPath', () => {
     (hass.callWS as ReturnType<typeof vi.fn>).mockResolvedValueOnce({});
     await expect(signPath(hass, '/api/thing')).rejects.toBeInstanceOf(EndpointError);
   });
+
+  // Everything the card connects to must stay on HA's own origin (see the
+  // module header). A hostile/compromised HA (or a MITM on plaintext HA)
+  // could otherwise answer `auth/sign_path` with an off-origin URL and have
+  // the card open its go2rtc websocket, or fetch a poster, from an attacker.
+  it.each([
+    ['protocol-relative', '//evil.com/x'],
+    ['backslash', '/\\evil.com/x'],
+    ['absolute', 'https://evil.com/x'],
+  ])('rejects an off-origin signed path (%s)', async (_label, evilPath) => {
+    const hass = fakeHass();
+    (hass.callWS as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ path: evilPath });
+    await expect(signPath(hass, '/api/thing')).rejects.toMatchObject({
+      name: 'EndpointError',
+      code: 'sign-failed',
+    });
+  });
+
+  it('still resolves a normal same-origin signed path', async () => {
+    const hass = fakeHass();
+    await expect(signPath(hass, '/api/frigate/frigate/go2rtc/ws/api/ws?src=front_yard')).resolves.toBe(
+      '/api/frigate/frigate/go2rtc/ws/api/ws?src=front_yard&authSig=sig-1',
+    );
+  });
 });
 
 describe('toAbsoluteWsUrl', () => {
@@ -236,6 +261,32 @@ describe('toAbsoluteWsUrl', () => {
     expect(toAbsoluteWsUrl('/api/x?authSig=abc', base)).toBe(
       'wss://ha.example.com/api/x?authSig=abc',
     );
+  });
+
+  // Belt-and-braces: even though `signPath` already rejects an off-origin
+  // path, this helper independently asserts the same invariant — it is the
+  // last line of defence before the URL is handed to `WebSocket`/`<img>`.
+  it('throws sign-failed for a protocol-relative path that resolves off-origin', () => {
+    const base = new URL('https://ha.example.com/lovelace/0');
+    expect(() => toAbsoluteWsUrl('//evil.com/x', base)).toThrow(EndpointError);
+    try {
+      toAbsoluteWsUrl('//evil.com/x', base);
+      expect.unreachable();
+    } catch (error) {
+      expect(error).toMatchObject({ name: 'EndpointError', code: 'sign-failed' });
+    }
+  });
+});
+
+describe('toAbsoluteHttpUrl', () => {
+  it('throws sign-failed for a protocol-relative path that resolves off-origin', () => {
+    const base = new URL('https://ha.example.com/lovelace/0');
+    try {
+      toAbsoluteHttpUrl('//evil.com/x', base);
+      expect.unreachable();
+    } catch (error) {
+      expect(error).toMatchObject({ name: 'EndpointError', code: 'sign-failed' });
+    }
   });
 });
 
