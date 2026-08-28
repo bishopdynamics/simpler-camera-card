@@ -4,6 +4,16 @@ import { ConfigError, SimplerCameraCard, normalizeConfig } from '../src/card';
 import { EndpointError } from '../src/endpoint';
 import type { StreamSupervisorDeps } from '../src/reliability/supervisor';
 import { SnapshotLoop } from '../src/snapshot';
+import {
+  FakeImage,
+  cameraEntity,
+  collectHassActionDetails,
+  fakeHass,
+  installImageStub,
+  pointer,
+  releaseHassActions,
+  tap,
+} from './fixtures';
 import { FakeMediaSource, FakeWebSocket, installObjectUrlStubs } from './player/stubs';
 import {
   CARD_TAG,
@@ -11,7 +21,6 @@ import {
   HIDDEN_TEARDOWN_GRACE_MS,
   POSTER_REFRESH_INTERVAL_MS,
   TIER1_RETRY_DELAY_MS,
-  type CameraEntity,
   type EndpointResolver,
   type HomeAssistant,
   type LivePlayer,
@@ -19,28 +28,8 @@ import {
 
 const base = { type: CARD_TYPE, camera: 'camera.front_yard' };
 
-function cameraEntity(
-  entity_id = 'camera.front_yard',
-  attributes: CameraEntity['attributes'] = {
-    camera_name: 'front_yard',
-    friendly_name: 'Front Yard',
-  },
-): CameraEntity {
-  return { entity_id, state: 'streaming', attributes };
-}
-
-function fakeHass(...entities: CameraEntity[]): HomeAssistant {
-  return {
-    states: Object.fromEntries(entities.map((e) => [e.entity_id, e])),
-    connected: true,
-    callWS: async () => ({}) as never,
-  };
-}
-
 /** The camera the wiring tests use: Frigate attributes plus a snapshot URL. */
-const posterEntity = cameraEntity('camera.front_yard', {
-  camera_name: 'front_yard',
-  friendly_name: 'Front Yard',
+const posterEntity = cameraEntity({
   entity_picture: '/api/camera_proxy/camera.front_yard?token=abc',
 });
 
@@ -60,17 +49,17 @@ function neverResolves(): EndpointResolver {
   return stubEndpoint({ resolveSignedWsUrl: () => new Promise<string>(() => {}) });
 }
 
-interface FakePlayer extends LivePlayer {
+interface RecordingPlayer extends LivePlayer {
   video?: HTMLVideoElement;
   url?: string;
   destroyed: boolean;
 }
 
 /** Records every player the card's factory is asked to build. */
-function playerFactory(): { players: FakePlayer[]; create: () => FakePlayer } {
-  const players: FakePlayer[] = [];
-  const create = (): FakePlayer => {
-    const player: FakePlayer = {
+function recordingPlayerFactory(): { players: RecordingPlayer[]; create: () => RecordingPlayer } {
+  const players: RecordingPlayer[] = [];
+  const create = (): RecordingPlayer => {
+    const player: RecordingPlayer = {
       destroyed: false,
       onPlaying: () => {},
       onDead: () => {},
@@ -116,67 +105,6 @@ function container(card: SimplerCameraCard): HTMLElement {
   return element;
 }
 
-/** Every `hass-action` the card lets escape, cleaned up after each test. */
-function collectHassActions(): HassActionDetail[] {
-  const seen: HassActionDetail[] = [];
-  const listener = (event: Event): void => {
-    seen.push((event as CustomEvent<HassActionDetail>).detail);
-  };
-  document.addEventListener('hass-action', listener);
-  hassActionCleanups.push(() => document.removeEventListener('hass-action', listener));
-  return seen;
-}
-
-let hassActionCleanups: (() => void)[] = [];
-
-function pointer(type: string, init: PointerEventInit = {}): PointerEvent {
-  return new PointerEvent(type, {
-    bubbles: true,
-    composed: true,
-    pointerId: 1,
-    isPrimary: true,
-    button: 0,
-    clientX: 40,
-    clientY: 40,
-    ...init,
-  });
-}
-
-function tapOn(target: HTMLElement): void {
-  target.dispatchEvent(pointer('pointerdown'));
-  target.dispatchEvent(pointer('pointerup'));
-}
-
-/**
- * Snapshot mode preloads every frame into an `Image`, which happy-dom will
- * never actually fetch — so the card tests stand a stub in for it. `mode`
- * decides whether a preload decodes or fails.
- */
-class FakeImage {
-  static mode: 'load' | 'error' = 'load';
-  onload: (() => void) | null = null;
-  onerror: (() => void) | null = null;
-  private value = '';
-
-  get src(): string {
-    return this.value;
-  }
-
-  set src(next: string) {
-    this.value = next;
-    if (next === '') return;
-    queueMicrotask(() => {
-      if (FakeImage.mode === 'error') this.onerror?.();
-      else this.onload?.();
-    });
-  }
-}
-
-function installImageStub(mode: 'load' | 'error' = 'load'): void {
-  FakeImage.mode = mode;
-  vi.stubGlobal('Image', FakeImage);
-}
-
 /** A snapshot resolver handing out a distinct signed URL per poll. */
 function countingPoster(): { calls: () => number; resolvePosterUrl: () => Promise<string> } {
   let issued = 0;
@@ -199,8 +127,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
   document.querySelectorAll(CARD_TAG).forEach((card) => card.remove());
-  for (const undo of hassActionCleanups) undo();
-  hassActionCleanups = [];
+  releaseHassActions();
 });
 
 describe('normalizeConfig — required fields', () => {
@@ -525,8 +452,12 @@ describe('SimplerCameraCard element', () => {
 
   it('getStubConfig prefers a camera exposing camera_name', () => {
     const hass = fakeHass(
-      cameraEntity('camera.generic', { friendly_name: 'Generic' }),
-      cameraEntity('camera.frigate_one'),
+      // Not a Frigate camera: no camera_name to stream from.
+      cameraEntity(
+        { client_id: undefined, camera_name: undefined, friendly_name: 'Generic' },
+        'camera.generic',
+      ),
+      cameraEntity({}, 'camera.frigate_one'),
     );
     expect(SimplerCameraCard.getStubConfig(hass)).toEqual({
       type: CARD_TYPE,
@@ -599,7 +530,7 @@ describe('SimplerCameraCard element', () => {
 
 describe('SimplerCameraCard — supervisor wiring', () => {
   it('mounts a player on the card’s own video element once everything is present', async () => {
-    const { players, create } = playerFactory();
+    const { players, create } = recordingPlayerFactory();
     const card = mountCard(base, { createPlayer: create, endpoint: stubEndpoint() });
     await settle(card);
 
@@ -609,7 +540,7 @@ describe('SimplerCameraCard — supervisor wiring', () => {
   });
 
   it('waits for hass before starting, whatever order things arrive in', async () => {
-    const { players, create } = playerFactory();
+    const { players, create } = recordingPlayerFactory();
     const card = document.createElement(CARD_TAG);
     card.supervisorOverrides = { createPlayer: create, endpoint: stubEndpoint() };
     card.setConfig(base);
@@ -623,7 +554,7 @@ describe('SimplerCameraCard — supervisor wiring', () => {
   });
 
   it('stops the supervisor when the card leaves the DOM', async () => {
-    const { players, create } = playerFactory();
+    const { players, create } = recordingPlayerFactory();
     const card = mountCard(base, { createPlayer: create, endpoint: stubEndpoint() });
     await settle(card);
 
@@ -632,7 +563,7 @@ describe('SimplerCameraCard — supervisor wiring', () => {
   });
 
   it('rebuilds the supervisor when setConfig changes the stream', async () => {
-    const { players, create } = playerFactory();
+    const { players, create } = recordingPlayerFactory();
     const card = mountCard(base, { createPlayer: create, endpoint: stubEndpoint() });
     await settle(card);
 
@@ -649,14 +580,14 @@ describe('SimplerCameraCard — supervisor wiring', () => {
     await settle(card);
     const video = card.shadowRoot!.querySelector('video');
 
-    card.hass = fakeHass(cameraEntity('camera.front_yard', { camera_name: 'front_yard' }));
+    card.hass = fakeHass(cameraEntity());
     await settle(card);
 
     expect(card.shadowRoot!.querySelector('video')).toBe(video);
   });
 
   it('hides the poster and the status pill while playing', async () => {
-    const { players, create } = playerFactory();
+    const { players, create } = recordingPlayerFactory();
     const card = mountCard(base, { createPlayer: create, endpoint: stubEndpoint() });
     await settle(card);
     expect(card.shadowRoot!.querySelector('img.poster')).not.toBeNull();
@@ -684,7 +615,7 @@ describe('SimplerCameraCard — supervisor wiring', () => {
 describe('SimplerCameraCard — lifecycle plumbing', () => {
   it('retries a dead stream on the tier-1 delay, showing the countdown', async () => {
     vi.useFakeTimers();
-    const { players, create } = playerFactory();
+    const { players, create } = recordingPlayerFactory();
     const card = mountCard(base, { createPlayer: create, endpoint: stubEndpoint() });
     await settle(card);
 
@@ -699,7 +630,7 @@ describe('SimplerCameraCard — lifecycle plumbing', () => {
 
   it('reconnects immediately on the hass.connected false→true edge', async () => {
     vi.useFakeTimers();
-    const { players, create } = playerFactory();
+    const { players, create } = recordingPlayerFactory();
     const card = mountCard(base, { createPlayer: create, endpoint: stubEndpoint() });
     await settle(card);
 
@@ -723,7 +654,7 @@ describe('SimplerCameraCard — lifecycle plumbing', () => {
       get: () => visibility.value,
     });
     try {
-      const { players, create } = playerFactory();
+      const { players, create } = recordingPlayerFactory();
       const card = mountCard(base, { createPlayer: create, endpoint: stubEndpoint() });
       await settle(card);
 
@@ -746,7 +677,7 @@ describe('SimplerCameraCard — lifecycle plumbing', () => {
 
   it('treats pageshow/online/resume as page-resumed', async () => {
     vi.useFakeTimers();
-    const { players, create } = playerFactory();
+    const { players, create } = recordingPlayerFactory();
     const card = mountCard(base, { createPlayer: create, endpoint: stubEndpoint() });
     await settle(card);
 
@@ -769,7 +700,7 @@ describe('SimplerCameraCard — lifecycle plumbing', () => {
       get: () => visibility.value,
     });
     try {
-      const { players, create } = playerFactory();
+      const { players, create } = recordingPlayerFactory();
       const card = mountCard(base, { createPlayer: create, endpoint: stubEndpoint() });
       await settle(card);
 
@@ -802,7 +733,7 @@ describe('SimplerCameraCard — lifecycle plumbing', () => {
   });
 
   it('recovers from a rejected update instead of latching the start guard', async () => {
-    const { players, create } = playerFactory();
+    const { players, create } = recordingPlayerFactory();
     const card = document.createElement(CARD_TAG);
     card.supervisorOverrides = { createPlayer: create, endpoint: stubEndpoint() };
     card.setConfig(base);
@@ -832,7 +763,7 @@ describe('SimplerCameraCard — lifecycle plumbing', () => {
 
   it('drops its listeners when disconnected', async () => {
     vi.useFakeTimers();
-    const { players, create } = playerFactory();
+    const { players, create } = recordingPlayerFactory();
     const card = mountCard(base, { createPlayer: create, endpoint: stubEndpoint() });
     await settle(card);
     card.remove();
@@ -848,7 +779,7 @@ describe('SimplerCameraCard — lifecycle plumbing', () => {
 
 describe('SimplerCameraCard — actions', () => {
   it('fires hass-action from the host with the camera entity and every slot', async () => {
-    const fired = collectHassActions();
+    const fired = collectHassActionDetails();
     const card = mountCard(
       {
         ...base,
@@ -859,7 +790,7 @@ describe('SimplerCameraCard — actions', () => {
     );
     await settle(card);
 
-    tapOn(container(card));
+    tap(container(card));
 
     expect(fired).toEqual([
       {
@@ -885,14 +816,14 @@ describe('SimplerCameraCard — actions', () => {
     document.addEventListener('hass-action', (event) => targets.push(event.target!), {
       once: true,
     });
-    tapOn(container(card));
+    tap(container(card));
 
     expect(targets).toEqual([card]);
   });
 
   it('recognises hold and double-tap once they are configured', async () => {
     vi.useFakeTimers();
-    const fired = collectHassActions();
+    const fired = collectHassActionDetails();
     const card = mountCard(
       {
         ...base,
@@ -908,21 +839,21 @@ describe('SimplerCameraCard — actions', () => {
     vi.advanceTimersByTime(HOLD_MS);
     surface.dispatchEvent(pointer('pointerup'));
 
-    tapOn(surface);
-    tapOn(surface);
+    tap(surface);
+    tap(surface);
     vi.advanceTimersByTime(DOUBLE_TAP_MS * 2);
 
     expect(fired.map((detail) => detail.action)).toEqual(['hold', 'double_tap']);
   });
 
   it('picks up a config edit without being re-wired', async () => {
-    const fired = collectHassActions();
+    const fired = collectHassActionDetails();
     const card = mountCard(base, { endpoint: neverResolves() });
     await settle(card);
 
     card.setConfig({ ...base, tap_action: { action: 'toggle' } });
     await settle(card);
-    tapOn(container(card));
+    tap(container(card));
 
     expect(fired[0].config.tap_action).toEqual({ action: 'toggle' });
   });
@@ -951,7 +882,7 @@ describe('SimplerCameraCard — actions', () => {
   });
 
   it('activates from the keyboard', async () => {
-    const fired = collectHassActions();
+    const fired = collectHassActionDetails();
     const card = mountCard(
       { ...base, tap_action: { action: 'more-info' } },
       { endpoint: neverResolves() },
@@ -984,13 +915,13 @@ describe('SimplerCameraCard — actions', () => {
     // an update that re-attaches leaves listeners nothing will ever remove.
     card.remove();
     await settle(card);
-    tapOn(surface);
+    tap(surface);
 
     expect(fired).toEqual([]);
   });
 
   it('stops listening once the card leaves the DOM, and listens again on return', async () => {
-    const fired = collectHassActions();
+    const fired = collectHassActionDetails();
     const card = mountCard(
       { ...base, tap_action: { action: 'more-info' } },
       { endpoint: neverResolves() },
@@ -999,12 +930,12 @@ describe('SimplerCameraCard — actions', () => {
     const surface = container(card);
 
     card.remove();
-    tapOn(surface);
+    tap(surface);
     expect(fired).toEqual([]);
 
     document.body.appendChild(card);
     await settle(card);
-    tapOn(container(card));
+    tap(container(card));
     expect(fired.map((detail) => detail.action)).toEqual(['tap']);
   });
 });
@@ -1013,7 +944,7 @@ describe('SimplerCameraCard — poster', () => {
   it('refreshes the signed snapshot while down, and stops once playing', async () => {
     vi.useFakeTimers();
     let issued = 0;
-    const { players, create } = playerFactory();
+    const { players, create } = recordingPlayerFactory();
     const card = mountCard(base, {
       createPlayer: create,
       endpoint: stubEndpoint({
@@ -1039,7 +970,7 @@ describe('SimplerCameraCard — poster', () => {
     // stream was down can settle long after the reason for it is gone. Writing
     // it then resurrects a poster nobody asked for — and after a `setConfig`
     // it would be a poster of a *different* camera.
-    const { players, create } = playerFactory();
+    const { players, create } = recordingPlayerFactory();
     let releasePoster: ((url: string) => void) | undefined;
     const card = mountCard(base, {
       createPlayer: create,
@@ -1070,7 +1001,7 @@ describe('SimplerCameraCard — poster', () => {
   });
 
   it('never lets a poster failure take the card down (live mode)', async () => {
-    const { players, create } = playerFactory();
+    const { players, create } = recordingPlayerFactory();
     const card = mountCard(base, {
       createPlayer: create,
       endpoint: stubEndpoint({
@@ -1099,12 +1030,8 @@ describe('SimplerCameraCard — poster', () => {
       '//evil.example/beacon.png',
       '/\\evil.example/beacon.png',
     ]) {
-      const offOriginEntity = cameraEntity('camera.front_yard', {
-        camera_name: 'front_yard',
-        friendly_name: 'Front Yard',
-        entity_picture: picture,
-      });
-      const { create } = playerFactory();
+      const offOriginEntity = cameraEntity({ entity_picture: picture });
+      const { create } = recordingPlayerFactory();
       const card = mountCard(
         base,
         { createPlayer: create, endpoint: neverResolves() },
@@ -1118,7 +1045,7 @@ describe('SimplerCameraCard — poster', () => {
   });
 
   it('still renders a relative entity_picture as before', async () => {
-    const { create } = playerFactory();
+    const { create } = recordingPlayerFactory();
     const card = mountCard(
       base,
       { createPlayer: create, endpoint: neverResolves() },
@@ -1139,7 +1066,7 @@ describe('SimplerCameraCard — snapshot mode', () => {
     vi.useFakeTimers();
     installImageStub();
     const poster = countingPoster();
-    const { players, create } = playerFactory();
+    const { players, create } = recordingPlayerFactory();
     const started = vi.spyOn(SnapshotLoop.prototype, 'start');
 
     const card = mountCard(snapshotBase, {
@@ -1179,7 +1106,7 @@ describe('SimplerCameraCard — snapshot mode', () => {
   it('live mode (and the default) never builds a snapshot loop', async () => {
     installImageStub();
     const started = vi.spyOn(SnapshotLoop.prototype, 'start');
-    const { players, create } = playerFactory();
+    const { players, create } = recordingPlayerFactory();
 
     const card = mountCard(base, { createPlayer: create, endpoint: stubEndpoint() });
     await settle(card);
@@ -1215,7 +1142,7 @@ describe('SimplerCameraCard — snapshot mode', () => {
     await settle(card);
     expect(statusText(card)).toBe('Snapshot is stale…');
 
-    FakeImage.mode = 'load';
+    FakeImage.behaviour = 'load';
     await vi.advanceTimersByTimeAsync(2_000);
     await settle(card);
     expect(statusText(card)).toBeUndefined();
@@ -1358,7 +1285,7 @@ describe('SimplerCameraCard — snapshot mode', () => {
   it('keeps the overlay and the tap action working', async () => {
     vi.useFakeTimers();
     installImageStub();
-    const fired = collectHassActions();
+    const fired = collectHassActionDetails();
     const card = mountCard(
       { ...snapshotBase, overlay: 'name', tap_action: { action: 'more-info' } },
       { endpoint: stubEndpoint({ resolvePosterUrl: countingPoster().resolvePosterUrl }) },
@@ -1369,7 +1296,7 @@ describe('SimplerCameraCard — snapshot mode', () => {
     expect(card.shadowRoot!.querySelector('.overlay')?.textContent?.trim()).toBe('Front Yard');
     expect(container(card).getAttribute('style')).toContain('16 / 9');
 
-    tapOn(container(card));
+    tap(container(card));
     expect(fired.map((detail) => detail.action)).toEqual(['tap']);
   });
 });
@@ -1386,7 +1313,7 @@ describe('SimplerCameraCard — tap to go live', () => {
 
   interface LiveRig {
     card: SimplerCameraCard;
-    players: FakePlayer[];
+    players: RecordingPlayer[];
     poster: ReturnType<typeof countingPoster>;
     fired: HassActionDetail[];
     starts: () => number;
@@ -1403,9 +1330,9 @@ describe('SimplerCameraCard — tap to go live', () => {
   ): Promise<LiveRig> {
     vi.useFakeTimers();
     installImageStub();
-    const fired = collectHassActions();
+    const fired = collectHassActionDetails();
     const poster = countingPoster();
-    const { players, create } = playerFactory();
+    const { players, create } = recordingPlayerFactory();
     const started = vi.spyOn(SnapshotLoop.prototype, 'start');
     const destroyed = vi.spyOn(SnapshotLoop.prototype, 'destroy');
     const card = mountCard(config, {
@@ -1426,7 +1353,7 @@ describe('SimplerCameraCard — tap to go live', () => {
 
   /** A tap, plus everything the resulting engine swap needs to settle. */
   async function tapAndSettle(card: SimplerCameraCard): Promise<void> {
-    tapOn(container(card));
+    tap(container(card));
     await vi.advanceTimersByTimeAsync(0);
     await settle(card);
   }
@@ -1527,7 +1454,7 @@ describe('SimplerCameraCard — tap to go live', () => {
     );
     expect(snapshotSrc(card)).toContain('sig=0');
 
-    tapOn(container(card));
+    tap(container(card));
     await card.updateComplete;
 
     // The <img class="snapshot"> is gone (live mode owns the media layer), so
@@ -1643,8 +1570,8 @@ describe('SimplerCameraCard — tap to go live', () => {
     await vi.advanceTimersByTimeAsync(HOLD_MS);
     surface.dispatchEvent(pointer('pointerup'));
 
-    tapOn(surface);
-    tapOn(surface);
+    tap(surface);
+    tap(surface);
     await vi.advanceTimersByTimeAsync(DOUBLE_TAP_MS * 2);
     await settle(card);
 
@@ -1664,7 +1591,7 @@ describe('SimplerCameraCard — tap to go live', () => {
     const card = mountCard(
       { ...tapLiveBase, live_duration: 120, reload_after_minutes_down: 1 },
       {
-        createPlayer: playerFactory().create,
+        createPlayer: recordingPlayerFactory().create,
         endpoint: stubEndpoint({
           resolvePosterUrl: countingPoster().resolvePosterUrl,
           // The stream is dead: the supervisor never leaves `connecting`, so

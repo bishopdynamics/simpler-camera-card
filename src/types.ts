@@ -294,7 +294,10 @@ export interface NormalizedCardConfig extends SimplerCameraCardConfig {
   live_duration: number;
 }
 
-/** Defaults applied by `normalizeConfig()`. */
+/**
+ * Defaults applied by `normalizeConfig()`. Exported so `normalizeConfig` and
+ * the test fixtures share one source of truth.
+ */
 export const CONFIG_DEFAULTS = {
   overlay: 'none' as OverlayMode,
   aspectRatio: '16 / 9',

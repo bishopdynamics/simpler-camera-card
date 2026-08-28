@@ -10,14 +10,8 @@ import {
   type SupervisorState,
   type SupervisorStateDetail,
 } from '../../src/types';
-import {
-  FakePlayer,
-  FakeWatchdog,
-  RvfcFakeVideo,
-  fakeConfig,
-  fakeEndpoint,
-  fakeHass,
-} from './doubles';
+import { fakeConfig, fakeHass } from '../fixtures';
+import { FakePlayer, FakeWatchdog, RvfcFakeVideo, fakeEndpoint } from './doubles';
 
 /** Let queued microtasks (the per-attempt URL signing) settle. */
 async function flush(): Promise<void> {

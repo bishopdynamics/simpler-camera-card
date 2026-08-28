@@ -11,43 +11,14 @@ import {
   type GestureAction,
   type HassActionDetail,
 } from '../src/actions';
-import { CARD_TYPE, type ActionConfig, type NormalizedCardConfig } from '../src/types';
-
-/**
- * A normalized config, shaped as `normalizeConfig()` would hand it over.
- * `tap_action` is set explicitly (not the `none` default) so gesture tests
- * always have a tap that does something to observe.
- */
-function config(overrides: Partial<NormalizedCardConfig> = {}): NormalizedCardConfig {
-  return {
-    type: CARD_TYPE,
-    camera: 'camera.front_yard',
-    overlay: 'none',
-    tap_action: { action: 'more-info' } as ActionConfig,
-    hold_action: { action: 'none' } as ActionConfig,
-    double_tap_action: { action: 'none' } as ActionConfig,
-    aspect_ratio: '16 / 9',
-    reload_after_minutes_down: 0,
-    mode: 'live',
-    refresh_interval: 5,
-    tap_to_live: false,
-    live_duration: 60,
-    ...overrides,
-  };
-}
-
-function pointer(type: string, init: PointerEventInit = {}): PointerEvent {
-  return new PointerEvent(type, {
-    bubbles: true,
-    composed: true,
-    pointerId: 1,
-    isPrimary: true,
-    button: 0,
-    clientX: 100,
-    clientY: 100,
-    ...init,
-  });
-}
+import { type ActionConfig, type NormalizedCardConfig } from '../src/types';
+import {
+  collectHassActions,
+  fakeConfig as config,
+  pointer,
+  releaseHassActions,
+  tap,
+} from './fixtures';
 
 interface Rig {
   target: HTMLElement;
@@ -60,18 +31,6 @@ interface Rig {
 }
 
 let rigs: Rig[] = [];
-let cleanups: (() => void)[] = [];
-
-/** Collect every `hass-action` that reaches the document until cleanup. */
-function collectHassActions(): CustomEvent<HassActionDetail>[] {
-  const seen: CustomEvent<HassActionDetail>[] = [];
-  const listener = (event: Event): void => {
-    seen.push(event as CustomEvent<HassActionDetail>);
-  };
-  document.addEventListener('hass-action', listener);
-  cleanups.push(() => document.removeEventListener('hass-action', listener));
-  return seen;
-}
 
 /** `null` stands for "Lovelace has not called setConfig yet". */
 function rig(initial: NormalizedCardConfig | null = config(), onTap?: () => boolean): Rig {
@@ -99,15 +58,8 @@ function rig(initial: NormalizedCardConfig | null = config(), onTap?: () => bool
   return built;
 }
 
-/** A complete press-and-release at one spot. */
-function tap(target: HTMLElement, init: PointerEventInit = {}): void {
-  target.dispatchEvent(pointer('pointerdown', init));
-  target.dispatchEvent(pointer('pointerup', init));
-}
-
 beforeEach(() => {
   rigs = [];
-  cleanups = [];
 });
 
 afterEach(() => {
@@ -115,7 +67,7 @@ afterEach(() => {
     built.controller.detach();
     built.target.remove();
   }
-  for (const undo of cleanups) undo();
+  releaseHassActions();
   vi.useRealTimers();
 });
 

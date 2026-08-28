@@ -4,15 +4,12 @@
  * The player, the endpoint resolver and the `<video>` element are all mocked
  * here against the contract in `src/types.ts`: the reliability layer's tests
  * never touch a real socket, a real MediaSource, or a real DOM media element.
+ *
+ * Doubles that are not specific to this layer — the config, the `hass` object —
+ * live in `tests/fixtures.ts`.
  */
 
-import type {
-  DeathReason,
-  EndpointResolver,
-  HomeAssistant,
-  LivePlayer,
-  NormalizedCardConfig,
-} from '../../src/types';
+import type { DeathReason, EndpointResolver, LivePlayer } from '../../src/types';
 import type { StallWatchdog, WatchdogOptions } from '../../src/reliability/watchdog';
 
 /* -------------------------------------------------------------------------- */
@@ -206,17 +203,8 @@ export class RvfcFakeVideo extends FakeVideoBase {
 export class PollingFakeVideo extends FakeVideoBase {}
 
 /* -------------------------------------------------------------------------- */
-/* Home Assistant + endpoint + config                                          */
+/* Endpoint                                                                    */
 /* -------------------------------------------------------------------------- */
-
-/** A `hass` stub; the supervisor only passes it through to the resolver. */
-export function fakeHass(): HomeAssistant {
-  return {
-    states: {},
-    connected: true,
-    callWS: (async () => ({})) as unknown as HomeAssistant['callWS'],
-  };
-}
 
 /** An {@link EndpointResolver} whose failure mode the test controls. */
 export interface FakeEndpoint extends EndpointResolver {
@@ -254,28 +242,5 @@ export function fakeEndpoint(): FakeEndpoint {
     },
     callCount: () => calls,
     urls,
-  };
-}
-
-/**
- * A normalized config shaped like `normalizeConfig()`'s output. `tap_action`
- * is set explicitly (not the `none` default) so gesture-adjacent code under
- * test always has something to fire; every other field matches its default.
- */
-export function fakeConfig(overrides: Partial<NormalizedCardConfig> = {}): NormalizedCardConfig {
-  return {
-    type: 'custom:simpler-camera-card',
-    camera: 'camera.front_yard',
-    overlay: 'none',
-    tap_action: { action: 'more-info' },
-    hold_action: { action: 'none' },
-    double_tap_action: { action: 'none' },
-    aspect_ratio: '16 / 9',
-    reload_after_minutes_down: 0,
-    mode: 'live',
-    refresh_interval: 5,
-    tap_to_live: false,
-    live_duration: 60,
-    ...overrides,
   };
 }

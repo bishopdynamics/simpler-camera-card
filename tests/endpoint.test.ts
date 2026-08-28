@@ -13,27 +13,18 @@ import {
   toAbsoluteWsUrl,
 } from '../src/endpoint';
 import type { CameraEntity, HomeAssistant, SimplerCameraCardConfig } from '../src/types';
+import { cameraEntity } from './fixtures';
 
 // The last-known-attribute cache is module state; isolate every test from it.
 beforeEach(() => {
   clearFrigateAttributeCache();
 });
 
-/** A Frigate camera entity as the integration actually exposes it. */
-function cameraEntity(overrides: Partial<CameraEntity['attributes']> = {}): CameraEntity {
-  return {
-    entity_id: 'camera.front_yard',
-    state: 'streaming',
-    attributes: {
-      client_id: 'frigate',
-      camera_name: 'front_yard',
-      friendly_name: 'Front Yard',
-      ...overrides,
-    },
-  };
-}
-
-/** Minimal `hass` double whose `callWS` mimics HA's `auth/sign_path` handler. */
+/**
+ * Minimal `hass` double whose `callWS` mimics HA's `auth/sign_path` handler.
+ * Signing is the thing under test here, so this file brings its own `hass`
+ * rather than the inert one in `tests/fixtures.ts`.
+ */
 function fakeHass(entity: CameraEntity | null = cameraEntity()): HomeAssistant {
   let nonce = 0;
   const callWS = vi.fn(async (msg: Record<string, unknown>) => {

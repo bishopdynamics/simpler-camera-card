@@ -16,72 +16,11 @@ import {
   type HomeAssistant,
   type NormalizedCardConfig,
 } from '../src/types';
+import { FakeImage, fakeConfig, fakeHass, type ImageBehaviour } from './fixtures';
 
 /* -------------------------------------------------------------------------- */
-/* Doubles                                                                     */
+/* Harness                                                                     */
 /* -------------------------------------------------------------------------- */
-
-/** What a preloaded image should do when its `src` is assigned. */
-type ImageBehaviour = 'load' | 'error' | 'hold';
-
-/** The parts of `HTMLImageElement` the loop touches. */
-class FakeImage {
-  onload: (() => void) | null = null;
-  onerror: (() => void) | null = null;
-  behaviour: ImageBehaviour = 'load';
-  private value = '';
-
-  get src(): string {
-    return this.value;
-  }
-
-  set src(next: string) {
-    this.value = next;
-    if (next === '') return;
-    if (this.behaviour === 'load') queueMicrotask(() => this.onload?.());
-    else if (this.behaviour === 'error') queueMicrotask(() => this.onerror?.());
-  }
-
-  /** Decode now — for `hold`, where the test says when. */
-  finishLoad(): void {
-    this.onload?.();
-  }
-
-  /** Fail now — for `hold`. */
-  finishError(): void {
-    this.onerror?.();
-  }
-
-  asImage(): HTMLImageElement {
-    return this as unknown as HTMLImageElement;
-  }
-}
-
-function fakeConfig(overrides: Partial<NormalizedCardConfig> = {}): NormalizedCardConfig {
-  return {
-    type: 'custom:simpler-camera-card',
-    camera: 'camera.front_yard',
-    overlay: 'none',
-    tap_action: { action: 'more-info' },
-    hold_action: { action: 'none' },
-    double_tap_action: { action: 'none' },
-    aspect_ratio: '16 / 9',
-    reload_after_minutes_down: 0,
-    mode: 'snapshot',
-    refresh_interval: 5,
-    tap_to_live: false,
-    live_duration: 60,
-    ...overrides,
-  };
-}
-
-function fakeHass(): HomeAssistant {
-  return {
-    states: {},
-    connected: true,
-    callWS: (async () => ({})) as unknown as HomeAssistant['callWS'],
-  };
-}
 
 interface Harness {
   loop: SnapshotLoop;
@@ -129,7 +68,7 @@ function harness(
   const loop = new SnapshotLoop({
     endpoint,
     getHass: options.hass ?? fakeHass,
-    getConfig: () => fakeConfig(options.config),
+    getConfig: () => fakeConfig({ mode: 'snapshot', ...options.config }),
     onFrame: (url) => frames.push(url),
     onStale: (count) => stale.push(count),
     onEndpointError: (error) => errors.push(error),
