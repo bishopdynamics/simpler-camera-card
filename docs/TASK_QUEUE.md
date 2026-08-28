@@ -19,4 +19,6 @@ How to process/manage the Task Queue:
 
 ## Queue
 
-(empty — FEATURE_SPEC_snapshot_mode accepted 2026-08-27, field-verified by James at v0.4.0)
+1. FEATURE_SPEC_tap_to_live.md
+   1. Opt-in: tapping a snapshot card temporarily switches to the MSE live stream (`live_duration` window, default 60 s; tap again to revert; LIVE countdown pill).
+   2. Status: [in-progress] — spec created and approved 2026-08-27 ("spec it and go"); implementing (3 serial slices).
