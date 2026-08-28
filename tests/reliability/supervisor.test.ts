@@ -374,7 +374,7 @@ describe('external events', () => {
     expect(h.states[h.states.length - 1].detail).toMatchObject({ reason: 'hass-reconnected' });
   });
 
-  it('resets the backoff on page-resumed, so the next failure starts from the base', async () => {
+  it('fires a pending remount on page-resumed without rewinding the backoff', async () => {
     const h = harness();
     await play(h);
 
@@ -392,9 +392,90 @@ describe('external events', () => {
     await h.settle();
     expect(h.last().state).toBe('connecting');
 
+    // The remaining 10 s were skipped, but the ladder carries on where it was.
     h.current().reportDead('ws-close');
     expect(h.last().state).toBe('remounting');
-    expect(h.last().detail?.delayMs).toBe(5_000);
+    expect(h.last().detail?.delayMs).toBe(20_000);
+  });
+
+  it('keeps escalating the tier-2 backoff while connectivity events flap', async () => {
+    const h = harness();
+    await play(h);
+
+    // Burn tier 1 so every later death lands in tier 2.
+    for (let i = 0; i < TIER1_MAX_RETRIES; i += 1) {
+      h.current().reportDead('ws-close');
+      await h.advance(TIER1_RETRY_DELAY_MS);
+    }
+
+    // A flapping Home Assistant socket fires each pending remount early. That
+    // must never pin the ladder at its base while go2rtc is genuinely down.
+    for (const delayMs of [5_000, 10_000, 20_000, 40_000, 80_000]) {
+      h.current().reportDead('ws-close');
+      expect(h.last().state).toBe('remounting');
+      expect(h.last().detail?.delayMs).toBe(delayMs);
+
+      h.supervisor.notifyExternalEvent('hass-reconnected');
+      await h.settle();
+      expect(h.last().state).toBe('connecting');
+    }
+  });
+
+  it('leaves the backoff untouched when nothing is pending', async () => {
+    const h = harness();
+    await play(h);
+
+    for (let i = 0; i < TIER1_MAX_RETRIES; i += 1) {
+      h.current().reportDead('ws-close');
+      await h.advance(TIER1_RETRY_DELAY_MS);
+    }
+    // Consume the first two rungs, landing mid-attempt with no pending retry.
+    h.current().reportDead('ws-close');
+    await h.advance(5_000);
+    h.current().reportDead('ws-close');
+    await h.advance(10_000);
+    expect(h.supervisor.state).toBe('connecting');
+
+    const states = h.states.length;
+    const players = h.players.length;
+    h.supervisor.notifyExternalEvent('hass-reconnected');
+    await h.settle();
+    expect(h.states).toHaveLength(states);
+    expect(h.players).toHaveLength(players);
+
+    h.current().reportDead('ws-close');
+    expect(h.last().detail?.delayMs).toBe(20_000);
+  });
+
+  it('resets the ladder once a flap-driven retry actually plays', async () => {
+    const h = harness();
+    await play(h);
+
+    for (let i = 0; i < TIER1_MAX_RETRIES; i += 1) {
+      h.current().reportDead('ws-close');
+      await h.advance(TIER1_RETRY_DELAY_MS);
+    }
+    h.current().reportDead('ws-close');
+    await h.advance(5_000);
+    h.current().reportDead('ws-close');
+    expect(h.last().detail?.delayMs).toBe(10_000);
+
+    h.supervisor.notifyExternalEvent('hass-reconnected');
+    await h.settle();
+    h.current().reportPlaying();
+    expect(h.supervisor.state).toBe('playing');
+
+    // Success — not the connectivity event — is what forgets the failures.
+    const delays: number[] = [];
+    for (let i = 0; i <= TIER1_MAX_RETRIES; i += 1) {
+      h.current().reportDead('ws-close');
+      delays.push(h.last().detail?.delayMs ?? 0);
+      await h.advance(delays[delays.length - 1]);
+    }
+    expect(delays).toEqual([
+      ...new Array<number>(TIER1_MAX_RETRIES).fill(TIER1_RETRY_DELAY_MS),
+      5_000,
+    ]);
   });
 
   it('does nothing on hass-reconnected while playing', async () => {
