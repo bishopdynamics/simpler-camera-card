@@ -7,7 +7,7 @@
 import './card';
 import { CARD_TAG } from './types';
 
-export const CARD_VERSION = '0.6.4';
+export const CARD_VERSION = '0.7.0';
 
 // The bundle's public surface, listed rather than re-exported wholesale: the
 // card is loaded for its side effect, so anything named here exists for a
