@@ -511,7 +511,11 @@ describe('SimplerCameraCard element', () => {
   it('reports sizes for both view types', () => {
     const card = new SimplerCameraCard();
     expect(card.getCardSize()).toBeGreaterThan(0);
-    expect(SimplerCameraCard.getGridOptions()).toMatchObject({ columns: 12, min_columns: 6 });
+    // Home Assistant reads `getGridOptions` off the card *instance* — it is a
+    // member of `LovelaceCard`, unlike `getStubConfig`/`getConfigForm`, which
+    // are static on the constructor. A static one is simply never looked at.
+    expect(card.getGridOptions()).toMatchObject({ columns: 12, min_columns: 6 });
+    expect(SimplerCameraCard).not.toHaveProperty('getGridOptions');
   });
 
   it('setConfig propagates validation errors to Lovelace', () => {
@@ -962,6 +966,30 @@ describe('SimplerCameraCard — actions', () => {
     expect(fired.map((detail) => detail.action)).toEqual(['tap']);
   });
 
+  it('stays deaf when a render lands after the card left the DOM', async () => {
+    const card = mountCard(
+      { ...base, tap_action: { action: 'more-info' } },
+      { endpoint: neverResolves() },
+    );
+    await settle(card);
+    const surface = container(card);
+    // The host is what `hass-action` is dispatched from, so listening there
+    // still hears the event once the card is detached from the document.
+    const fired: string[] = [];
+    card.addEventListener('hass-action', (event) => {
+      fired.push((event as CustomEvent<HassActionDetail>).detail.action);
+    });
+
+    // Teardown mutates reactive state (`_streamState` → `idle`), so a Lit
+    // update always lands *after* `disconnectedCallback` has detached — and
+    // an update that re-attaches leaves listeners nothing will ever remove.
+    card.remove();
+    await settle(card);
+    tapOn(surface);
+
+    expect(fired).toEqual([]);
+  });
+
   it('stops listening once the card leaves the DOM, and listens again on return', async () => {
     const fired = collectHassActions();
     const card = mountCard(
@@ -1005,6 +1033,41 @@ describe('SimplerCameraCard — poster', () => {
     await settle(card);
     await vi.advanceTimersByTimeAsync(POSTER_REFRESH_INTERVAL_MS * 3);
     expect(issued).toBe(2);
+  });
+
+  it('drops a signed URL that lands after the poster was retired', async () => {
+    // Signing waits on a websocket round-trip, so a refresh started while the
+    // stream was down can settle long after the reason for it is gone. Writing
+    // it then resurrects a poster nobody asked for — and after a `setConfig`
+    // it would be a poster of a *different* camera.
+    const { players, create } = playerFactory();
+    let releasePoster: ((url: string) => void) | undefined;
+    const card = mountCard(base, {
+      createPlayer: create,
+      endpoint: stubEndpoint({
+        resolvePosterUrl: () =>
+          new Promise<string>((resolve) => {
+            releasePoster = resolve;
+          }),
+      }),
+    });
+    await settle(card);
+    // Connecting: a refresh is in flight and the unsigned fallback is showing.
+    expect(posterSrc(card)).toContain('token=abc');
+
+    players[0].onPlaying();
+    await settle(card);
+    expect(posterSrc(card)).toBeUndefined();
+
+    // The signature arrives after the stream came up.
+    releasePoster!('/api/camera_proxy/camera.front_yard?sig=stale');
+    await settle(card);
+
+    // Down again, so the poster layer is back: it must not be that URL.
+    players[0].onDead('ws-close');
+    await settle(card);
+    expect(posterSrc(card)).not.toContain('sig=stale');
+    expect(posterSrc(card)).toContain('token=abc');
   });
 
   it('never lets a poster failure take the card down (live mode)', async () => {

@@ -394,6 +394,9 @@ export class SimplerCameraCard extends LitElement {
   /** Poster refresh interval handle, live only while the stream is down. */
   private _posterTimer?: ReturnType<typeof setInterval>;
 
+  /** Stamps each poster refresh; a URL from an older generation is dropped. */
+  private _posterGeneration = 0;
+
   /** Fires once, at the end of the temporary live window. */
   private _liveWindowTimer?: ReturnType<typeof setTimeout>;
 
@@ -483,7 +486,11 @@ export class SimplerCameraCard extends LitElement {
 
   protected updated(changed: PropertyValues): void {
     super.updated(changed);
-    this._syncActionTarget();
+    // Lit keeps updating a disconnected element, and `disconnectedCallback`
+    // itself mutates reactive state (`_streamState` → `idle`), so an update
+    // reliably lands *after* the teardown. Re-attaching there would bind
+    // listeners nothing is left to remove, on a card that must be inert.
+    if (this.isConnected) this._syncActionTarget();
   }
 
   /**
@@ -591,11 +598,15 @@ export class SimplerCameraCard extends LitElement {
   private _startSupervisor(config: NormalizedCardConfig): void {
     const supervisor = new StreamSupervisorImpl({
       createPlayer: (): LivePlayer => new MsePlayer(),
-      endpoint: endpointResolver,
       getHass: () => this._hass,
       getVideo: () => this._video,
       getConfig: () => this._supervisorConfig(config),
       ...this.supervisorOverrides,
+      // After the spread, so the resolver has exactly one derivation — shared
+      // with the snapshot loop and the poster refresh. Defaulting it *before*
+      // the spread would let an override carrying an explicit `undefined` blank
+      // it out here while `_endpoint` still handed back the real one.
+      endpoint: this._endpoint,
     });
     supervisor.onStateChange = (state, detail) => this._onStreamState(state, detail);
     this._supervisor = supervisor;
@@ -797,6 +808,10 @@ export class SimplerCameraCard extends LitElement {
   }
 
   private _stopPosterRefresh(): void {
+    // Retire the refresh in flight along with the timer — the reason we are
+    // stopping is precisely that the poster is no longer wanted. See
+    // {@link _refreshPoster}; the same generation idiom as `snapshot.ts`.
+    this._posterGeneration += 1;
     if (this._posterTimer === undefined) return;
     clearInterval(this._posterTimer);
     this._posterTimer = undefined;
@@ -813,9 +828,14 @@ export class SimplerCameraCard extends LitElement {
     const hass = this._hass;
     const config = this._config;
     if (!hass || !config) return;
+    const generation = this._posterGeneration;
     try {
       const url = await this._endpoint.resolvePosterUrl(hass, config);
-      if (url) this._posterUrl = url;
+      // Signing waits on a websocket round-trip, and the stream can start
+      // playing — or the card be reconfigured, or torn down — while it is in
+      // flight. Writing then resurrects a poster nobody wants, and after a
+      // `setConfig` it would be a poster of a *different* camera.
+      if (url && generation === this._posterGeneration) this._posterUrl = url;
     } catch (error) {
       console.info(`${LOG_PREFIX} poster refresh failed:`, error);
     }
@@ -833,8 +853,14 @@ export class SimplerCameraCard extends LitElement {
    * Sections-view sizing. Video needs width to be useful, so the card claims
    * the full 12-column section by default and refuses to be squeezed below
    * half-width.
+   *
+   * An *instance* method deliberately: Home Assistant looks this up on the card
+   * element it built (`LovelaceCard.getGridOptions`), the same way it reads
+   * `getCardSize`. Only `getStubConfig` / `getConfigForm` are static — those it
+   * calls on the constructor, before any element exists. A static one here
+   * would simply never be seen, leaving the card at the section default.
    */
-  static getGridOptions(): Record<string, number> {
+  getGridOptions(): Record<string, number> {
     return {
       columns: 12,
       rows: 6,
