@@ -4,15 +4,20 @@
  * The card owns three things and delegates everything else:
  *
  * 1. **Config** — validation, defaults and the errors Lovelace shows the user.
- * 2. **Wiring** — it builds the one {@link StreamSupervisorImpl} that owns the
- *    connection state machine, hands it the real {@link endpointResolver}, a
- *    {@link PlayerFactory} and getters for `hass` / `<video>` / config, then
- *    reports page-lifecycle facts to it (`visibilitychange`, `pageshow`,
- *    `online`, `resume`, and the `hass.connected` false→true edge).
+ * 2. **Wiring** — under `mode: live` it builds the one
+ *    {@link StreamSupervisorImpl} that owns the connection state machine, hands
+ *    it the real {@link endpointResolver}, a {@link PlayerFactory} and getters
+ *    for `hass` / `<video>` / config, then reports page-lifecycle facts to it
+ *    (`visibilitychange`, `pageshow`, `online`, `resume`, and the
+ *    `hass.connected` false→true edge). Under `mode: snapshot` it builds a
+ *    {@link SnapshotLoop} instead — no supervisor, no player, no watchdog, no
+ *    `<video>` — and routes the same lifecycle facts to `pause()` / `resume()` /
+ *    `refreshNow()`.
  * 3. **Degraded UX** — while the stream is not `playing` it shows the latest
  *    camera snapshot, dimmed, with a small status indicator; the snapshot is
  *    re-signed and refreshed every {@link POSTER_REFRESH_INTERVAL_MS} while the
- *    stream is down.
+ *    stream is down. In snapshot mode the same indicator reports a stale feed
+ *    after `SNAPSHOT_STALE_AFTER_FAILURES` consecutive failed polls.
  *
  * Tap / hold / double-tap live in `actions.ts`; the card only attaches the
  * {@link ActionController} to its container and renders the matching
@@ -30,6 +35,7 @@ import { buildConfigForm, type ConfigForm } from './editor';
 import { endpointResolver } from './endpoint';
 import { MsePlayer } from './player/mse-player';
 import { StreamSupervisorImpl, type StreamSupervisorDeps } from './reliability/supervisor';
+import { SnapshotLoop } from './snapshot';
 import {
   ACTION_NAMES,
   CARD_TAG,
@@ -274,13 +280,25 @@ export class SimplerCameraCard extends LitElement {
   /** Latest poster URL, when one has been resolved. */
   @state() private _posterUrl?: string;
 
+  /** Snapshot mode: the newest *decoded* frame. Undefined until the first one. */
+  @state() private _snapshotUrl?: string;
+
+  /** Snapshot mode: enough consecutive polls have failed to say so. */
+  @state() private _snapshotStale = false;
+
+  /** Snapshot mode: the last config-class endpoint failure, for the status pill. */
+  @state() private _snapshotError?: string;
+
   private _hass?: HomeAssistant;
 
-  /** The stable media element; see {@link createVideoElement}. */
+  /** The stable media element; see {@link createVideoElement}. Live mode only. */
   private readonly _video: HTMLVideoElement = createVideoElement();
 
-  /** Built on first connect with config + hass; destroyed on disconnect. */
+  /** Live mode: built on first connect with config + hass; destroyed on disconnect. */
   private _supervisor?: StreamSupervisorImpl;
+
+  /** Snapshot mode: built and destroyed on exactly the same occasions. */
+  private _snapshot?: SnapshotLoop;
 
   /**
    * Gesture recognizer for `tap_action` / `hold_action` / `double_tap_action`.
@@ -320,6 +338,7 @@ export class SimplerCameraCard extends LitElement {
     // rather than at the end of a backoff.
     if (previous?.connected === false && hass?.connected === true) {
       this._supervisor?.notifyExternalEvent('hass-reconnected');
+      this._snapshot?.refreshNow();
     }
 
     this._maybeStart();
@@ -342,11 +361,12 @@ export class SimplerCameraCard extends LitElement {
     const previous = this._config;
     this._config = next;
 
-    // A config edit changes the camera, stream or escape-hatch policy, so the
-    // running supervisor is stale: tear it down and build a fresh one.
+    // A config edit changes the camera, stream, mode or escape-hatch policy, so
+    // whatever is running is stale: tear it down and build a fresh one.
     if (previous) {
-      this._stopSupervisor();
+      this._stopEverything();
       this._posterUrl = undefined;
+      this._snapshotUrl = undefined;
     }
     this._maybeStart();
   }
@@ -378,7 +398,7 @@ export class SimplerCameraCard extends LitElement {
     window.removeEventListener('pageshow', this._onPageResumed);
     window.removeEventListener('online', this._onPageResumed);
     this._actions.detach();
-    this._stopSupervisor();
+    this._stopEverything();
     super.disconnectedCallback();
   }
 
@@ -400,36 +420,46 @@ export class SimplerCameraCard extends LitElement {
   }
 
   private readonly _onVisibilityChange = (): void => {
-    this._supervisor?.notifyExternalEvent(
-      document.visibilityState === 'hidden' ? 'visibility-hidden' : 'visibility-visible',
-    );
+    const hidden = document.visibilityState === 'hidden';
+    // Pausing a poll loop is free (no socket, no decoder), so snapshot mode
+    // needs none of the supervisor's teardown grace period.
+    if (hidden) this._snapshot?.pause();
+    else this._snapshot?.resume();
+    this._supervisor?.notifyExternalEvent(hidden ? 'visibility-hidden' : 'visibility-visible');
   };
 
   private readonly _onPageResumed = (): void => {
+    this._snapshot?.resume();
     this._supervisor?.notifyExternalEvent('page-resumed');
   };
 
   /* ------------------------------------------------------------------ */
-  /* Supervisor wiring                                                   */
+  /* Supervisor / snapshot-loop wiring                                   */
   /* ------------------------------------------------------------------ */
 
   /**
-   * Start streaming once the three preconditions hold: the element is in the
-   * document, Lovelace has given us a config, and `hass` has arrived. They can
-   * arrive in any order, so every one of those three events calls this.
+   * Start showing the camera once the three preconditions hold: the element is
+   * in the document, Lovelace has given us a config, and `hass` has arrived.
+   * They can arrive in any order, so every one of those three events calls this.
    *
    * The start is deferred to `updateComplete` so the `<video>` is actually in
    * the document before a `MediaSource` is attached to it.
+   *
+   * `config.mode` picks exactly one of the two engines: a live card never builds
+   * a {@link SnapshotLoop}, and a snapshot card never builds a supervisor,
+   * a player or a watchdog.
    */
   private _maybeStart(): void {
-    if (this._supervisor || this._startScheduled) return;
+    if (this._supervisor || this._snapshot || this._startScheduled) return;
     if (!this.isConnected || !this._config || !this._hass) return;
 
     this._startScheduled = true;
     void this.updateComplete.then(() => {
       this._startScheduled = false;
-      if (this._supervisor || !this.isConnected || !this._config || !this._hass) return;
-      this._startSupervisor(this._config);
+      if (this._supervisor || this._snapshot) return;
+      if (!this.isConnected || !this._config || !this._hass) return;
+      if (this._config.mode === 'snapshot') this._startSnapshotLoop(this._config);
+      else this._startSupervisor(this._config);
     });
   }
 
@@ -453,6 +483,47 @@ export class SimplerCameraCard extends LitElement {
     this._stopPosterRefresh();
     this._streamState = 'idle';
     this._streamDetail = undefined;
+  }
+
+  /**
+   * Snapshot mode: poll HA's signed snapshot on the configured interval.
+   *
+   * The loop is handed the same injectable resolver the supervisor uses, so the
+   * test seam (`supervisorOverrides.endpoint`) covers both modes.
+   */
+  private _startSnapshotLoop(config: NormalizedCardConfig): void {
+    const loop = new SnapshotLoop({
+      endpoint: this._endpoint,
+      getHass: () => this._hass,
+      getConfig: () => this._config ?? config,
+      onFrame: (url) => {
+        // A frame that decoded proves the whole path works again.
+        this._snapshotUrl = url;
+        this._snapshotStale = false;
+        this._snapshotError = undefined;
+      },
+      onStale: () => {
+        this._snapshotStale = true;
+      },
+      onEndpointError: (error) => {
+        this._snapshotError = describeError(error);
+      },
+    });
+    this._snapshot = loop;
+    loop.start();
+  }
+
+  private _stopSnapshotLoop(): void {
+    this._snapshot?.destroy();
+    this._snapshot = undefined;
+    this._snapshotStale = false;
+    this._snapshotError = undefined;
+  }
+
+  /** Tear down whichever engine is running; safe when neither is. */
+  private _stopEverything(): void {
+    this._stopSupervisor();
+    this._stopSnapshotLoop();
   }
 
   /* ------------------------------------------------------------------ */
@@ -558,13 +629,31 @@ export class SimplerCameraCard extends LitElement {
     const config = this._config;
     if (!config) return nothing;
 
-    const live = this._streamState === 'playing';
+    const snapshotMode = config.mode === 'snapshot';
     const entity = this._hass?.states?.[config.camera];
+    // "We have something real to show": a playing stream, or a decoded frame.
+    const showingMedia = snapshotMode
+      ? this._snapshotUrl !== undefined
+      : this._streamState === 'playing';
     // `entity_picture` is the unsigned fallback used until the first signed
     // snapshot resolves, so a fresh card is never a black rectangle.
-    const poster = live ? undefined : (this._posterUrl ?? entity?.attributes?.entity_picture);
+    const poster = showingMedia
+      ? undefined
+      : (this._posterUrl ?? entity?.attributes?.entity_picture);
+    // The one media layer: the stable `<video>` in live mode, a plain refreshing
+    // `<img>` in snapshot mode (nothing external holds a reference to it, so it
+    // needs none of the video element's node-value stability).
+    const media = snapshotMode
+      ? this._snapshotUrl !== undefined
+        ? html`<img class="snapshot" src=${this._snapshotUrl} alt="" aria-hidden="true" />`
+        : nothing
+      : this._video;
     const overlayText = this._overlayText(config, entity?.attributes?.friendly_name);
-    const status = live ? undefined : this._statusText(Boolean(entity));
+    const status = snapshotMode
+      ? this._snapshotStatusText(Boolean(entity))
+      : showingMedia
+        ? undefined
+        : this._statusText(Boolean(entity));
     // Only a card whose *tap* does something is announced (and focusable) as a
     // button — see `isInteractive`.
     const interactive = isInteractive(config);
@@ -580,7 +669,7 @@ export class SimplerCameraCard extends LitElement {
           aria-label=${interactive ? label : nothing}
         >
           ${poster ? html`<img class="poster" src=${poster} alt="" aria-hidden="true" />` : nothing}
-          ${this._video} ${overlayText ? html`<div class="overlay">${overlayText}</div>` : nothing}
+          ${media} ${overlayText ? html`<div class="overlay">${overlayText}</div>` : nothing}
           ${status ? html`<div class="status">${status}</div>` : nothing}
         </div>
       </ha-card>
@@ -623,6 +712,22 @@ export class SimplerCameraCard extends LitElement {
     }
   }
 
+  /**
+   * Status pill copy for `mode: snapshot`.
+   *
+   * Deliberately quiet: a single dropped poll says nothing at all (the last good
+   * frame simply stays up), and only a config-class endpoint failure or a run of
+   * failures long enough to matter puts text on screen.
+   */
+  private _snapshotStatusText(entityExists: boolean): string | undefined {
+    if (!this._hass) return 'Waiting for Home Assistant…';
+    if (!entityExists) return `Entity ${this._config?.camera} not found`;
+    if (this._snapshotError) return withMessage('Snapshot unavailable', this._snapshotError);
+    if (this._snapshotStale) return 'Snapshot is stale…';
+    if (this._snapshotUrl === undefined) return 'Connecting…';
+    return undefined;
+  }
+
   static styles = css`
     :host {
       display: block;
@@ -662,6 +767,7 @@ export class SimplerCameraCard extends LitElement {
     }
 
     .poster,
+    .snapshot,
     .video {
       position: absolute;
       inset: 0;
@@ -717,6 +823,16 @@ export class SimplerCameraCard extends LitElement {
       pointer-events: none;
     }
   `;
+}
+
+/** Best-effort human-readable text for anything that was thrown or rejected. */
+function describeError(error: unknown): string {
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'string') return error;
+  if (error && typeof error === 'object' && 'message' in error) {
+    return String((error as { message: unknown }).message);
+  }
+  return String(error);
 }
 
 /** `" in 8 s"` for a known delay, `""` otherwise. */

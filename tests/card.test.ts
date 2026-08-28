@@ -1,12 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DOUBLE_TAP_MS, HOLD_MS, type HassActionDetail } from '../src/actions';
 import { SimplerCameraCard, normalizeConfig } from '../src/card';
+import { EndpointError } from '../src/endpoint';
 import type { StreamSupervisorDeps } from '../src/reliability/supervisor';
-import {
-  FakeMediaSource,
-  FakeWebSocket,
-  installObjectUrlStubs,
-} from './player/stubs';
+import { SnapshotLoop } from '../src/snapshot';
+import { FakeMediaSource, FakeWebSocket, installObjectUrlStubs } from './player/stubs';
 import {
   CARD_TAG,
   CARD_TYPE,
@@ -150,8 +148,53 @@ function tapOn(target: HTMLElement): void {
   target.dispatchEvent(pointer('pointerup'));
 }
 
+/**
+ * Snapshot mode preloads every frame into an `Image`, which happy-dom will
+ * never actually fetch — so the card tests stand a stub in for it. `mode`
+ * decides whether a preload decodes or fails.
+ */
+class FakeImage {
+  static mode: 'load' | 'error' = 'load';
+  onload: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  private value = '';
+
+  get src(): string {
+    return this.value;
+  }
+
+  set src(next: string) {
+    this.value = next;
+    if (next === '') return;
+    queueMicrotask(() => {
+      if (FakeImage.mode === 'error') this.onerror?.();
+      else this.onload?.();
+    });
+  }
+}
+
+function installImageStub(mode: 'load' | 'error' = 'load'): void {
+  FakeImage.mode = mode;
+  vi.stubGlobal('Image', FakeImage);
+}
+
+/** A snapshot resolver handing out a distinct signed URL per poll. */
+function countingPoster(): { calls: () => number; resolvePosterUrl: () => Promise<string> } {
+  let issued = 0;
+  return {
+    calls: () => issued,
+    resolvePosterUrl: async () => `/api/camera_proxy/camera.front_yard?sig=${issued++}`,
+  };
+}
+
+function snapshotSrc(card: SimplerCameraCard): string | undefined {
+  return card.shadowRoot?.querySelector('img.snapshot')?.getAttribute('src') ?? undefined;
+}
+
 afterEach(() => {
   vi.useRealTimers();
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
   document.querySelectorAll(CARD_TAG).forEach((card) => card.remove());
   for (const undo of hassActionCleanups) undo();
   hassActionCleanups = [];
@@ -743,7 +786,7 @@ describe('SimplerCameraCard — poster', () => {
     expect(issued).toBe(2);
   });
 
-  it('never lets a poster failure take the card down', async () => {
+  it('never lets a poster failure take the card down (live mode)', async () => {
     const { players, create } = playerFactory();
     const card = mountCard(base, {
       createPlayer: create,
@@ -760,5 +803,209 @@ describe('SimplerCameraCard — poster', () => {
     expect(card.shadowRoot!.querySelector('img.poster')?.getAttribute('src')).toContain(
       'token=abc',
     );
+  });
+});
+
+describe('SimplerCameraCard — snapshot mode', () => {
+  const snapshotBase = { ...base, mode: 'snapshot', refresh_interval: 2 };
+
+  it('polls stills and never builds a stream', async () => {
+    vi.useFakeTimers();
+    installImageStub();
+    const poster = countingPoster();
+    const { players, create } = playerFactory();
+    const started = vi.spyOn(SnapshotLoop.prototype, 'start');
+
+    const card = mountCard(snapshotBase, {
+      createPlayer: create,
+      endpoint: stubEndpoint({ resolvePosterUrl: poster.resolvePosterUrl }),
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    await settle(card);
+
+    // No supervisor, no player, no <video> — just a refreshing <img>.
+    expect(started).toHaveBeenCalledTimes(1);
+    expect(players).toHaveLength(0);
+    expect(card.shadowRoot!.querySelector('video')).toBeNull();
+    expect(snapshotSrc(card)).toContain('sig=0');
+    expect(statusText(card)).toBeUndefined();
+
+    await vi.advanceTimersByTimeAsync(2_000);
+    await settle(card);
+    expect(snapshotSrc(card)).toContain('sig=1');
+    expect(poster.calls()).toBe(2);
+  });
+
+  it('shows the unsigned entity_picture and a connecting pill until the first frame', async () => {
+    installImageStub();
+    const card = mountCard(snapshotBase, {
+      endpoint: stubEndpoint({ resolvePosterUrl: () => new Promise<string>(() => {}) }),
+    });
+    await settle(card);
+
+    expect(snapshotSrc(card)).toBeUndefined();
+    expect(card.shadowRoot!.querySelector('img.poster')?.getAttribute('src')).toContain(
+      'token=abc',
+    );
+    expect(statusText(card)).toBe('Connecting…');
+  });
+
+  it('live mode (and the default) never builds a snapshot loop', async () => {
+    installImageStub();
+    const started = vi.spyOn(SnapshotLoop.prototype, 'start');
+    const { players, create } = playerFactory();
+
+    const card = mountCard(base, { createPlayer: create, endpoint: stubEndpoint() });
+    await settle(card);
+    expect(started).not.toHaveBeenCalled();
+    expect(players).toHaveLength(1);
+
+    const explicit = mountCard(
+      { ...base, mode: 'live', refresh_interval: 1 },
+      {
+        createPlayer: create,
+        endpoint: stubEndpoint(),
+      },
+    );
+    await settle(explicit);
+    expect(started).not.toHaveBeenCalled();
+    expect(explicit.shadowRoot!.querySelector('img.snapshot')).toBeNull();
+  });
+
+  it('reports a stale feed after three failed polls, and clears it on recovery', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    installImageStub('error');
+    const poster = countingPoster();
+
+    const card = mountCard(snapshotBase, {
+      endpoint: stubEndpoint({ resolvePosterUrl: poster.resolvePosterUrl }),
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    await settle(card);
+    expect(statusText(card)).toBe('Connecting…');
+
+    await vi.advanceTimersByTimeAsync(4_000);
+    await settle(card);
+    expect(statusText(card)).toBe('Snapshot is stale…');
+
+    FakeImage.mode = 'load';
+    await vi.advanceTimersByTimeAsync(2_000);
+    await settle(card);
+    expect(statusText(card)).toBeUndefined();
+    expect(snapshotSrc(card)).toContain('sig=3');
+  });
+
+  it('surfaces a config-class endpoint error the way live mode does', async () => {
+    vi.useFakeTimers();
+    vi.spyOn(console, 'info').mockImplementation(() => {});
+    installImageStub();
+
+    const card = mountCard(snapshotBase, {
+      endpoint: stubEndpoint({
+        resolvePosterUrl: () =>
+          Promise.reject(new EndpointError('entity-not-found', 'Camera entity was not found.')),
+      }),
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    await settle(card);
+
+    expect(statusText(card)).toBe('Snapshot unavailable — Camera entity was not found.');
+  });
+
+  it('pauses polling while hidden and refreshes when visible again', async () => {
+    vi.useFakeTimers();
+    installImageStub();
+    const poster = countingPoster();
+    const visibility = { value: 'visible' };
+    Object.defineProperty(document, 'visibilityState', {
+      configurable: true,
+      get: () => visibility.value,
+    });
+    try {
+      const card = mountCard(snapshotBase, {
+        endpoint: stubEndpoint({ resolvePosterUrl: poster.resolvePosterUrl }),
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      await settle(card);
+      expect(poster.calls()).toBe(1);
+
+      visibility.value = 'hidden';
+      document.dispatchEvent(new Event('visibilitychange'));
+      await vi.advanceTimersByTimeAsync(20_000);
+      expect(poster.calls()).toBe(1);
+
+      visibility.value = 'visible';
+      document.dispatchEvent(new Event('visibilitychange'));
+      await vi.advanceTimersByTimeAsync(0);
+      await settle(card);
+      expect(poster.calls()).toBe(2);
+      expect(snapshotSrc(card)).toContain('sig=1');
+    } finally {
+      delete (document as unknown as Record<string, unknown>).visibilityState;
+    }
+  });
+
+  it('refreshes at once on pageshow and on the hass.connected edge', async () => {
+    vi.useFakeTimers();
+    installImageStub();
+    const poster = countingPoster();
+    const card = mountCard(snapshotBase, {
+      endpoint: stubEndpoint({ resolvePosterUrl: poster.resolvePosterUrl }),
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    await settle(card);
+    expect(poster.calls()).toBe(1);
+
+    window.dispatchEvent(new Event('pageshow'));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(poster.calls()).toBe(2);
+
+    card.hass = { ...fakeHass(posterEntity), connected: false };
+    card.hass = fakeHass(posterEntity);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(poster.calls()).toBe(3);
+  });
+
+  it('destroys the loop when the card leaves the DOM, and rebuilds it on setConfig', async () => {
+    vi.useFakeTimers();
+    installImageStub();
+    const destroyed = vi.spyOn(SnapshotLoop.prototype, 'destroy');
+    const poster = countingPoster();
+    const card = mountCard(snapshotBase, {
+      endpoint: stubEndpoint({ resolvePosterUrl: poster.resolvePosterUrl }),
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    await settle(card);
+
+    card.setConfig({ ...snapshotBase, refresh_interval: 5 });
+    await vi.advanceTimersByTimeAsync(0);
+    await settle(card);
+    expect(destroyed).toHaveBeenCalledTimes(1);
+
+    const pollsWhileMounted = poster.calls();
+    card.remove();
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(destroyed).toHaveBeenCalledTimes(2);
+    expect(poster.calls()).toBe(pollsWhileMounted);
+  });
+
+  it('keeps the overlay and the tap action working', async () => {
+    vi.useFakeTimers();
+    installImageStub();
+    const fired = collectHassActions();
+    const card = mountCard(
+      { ...snapshotBase, overlay: 'name' },
+      { endpoint: stubEndpoint({ resolvePosterUrl: countingPoster().resolvePosterUrl }) },
+    );
+    await vi.advanceTimersByTimeAsync(0);
+    await settle(card);
+
+    expect(card.shadowRoot!.querySelector('.overlay')?.textContent?.trim()).toBe('Front Yard');
+    expect(container(card).getAttribute('style')).toContain('16 / 9');
+
+    tapOn(container(card));
+    expect(fired.map((detail) => detail.action)).toEqual(['tap']);
   });
 });
