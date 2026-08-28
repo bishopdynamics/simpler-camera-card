@@ -8,7 +8,11 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EndpointError } from '../src/endpoint';
-import { SnapshotLoop, type SnapshotLoopDeps } from '../src/snapshot';
+import {
+  SNAPSHOT_TICK_TIMEOUT_FLOOR_MS,
+  SnapshotLoop,
+  type SnapshotLoopDeps,
+} from '../src/snapshot';
 import {
   SNAPSHOT_STALE_AFTER_FAILURES,
   type EndpointResolver,
@@ -391,6 +395,131 @@ describe('SnapshotLoop — overlap guard', () => {
 
     await vi.advanceTimersByTimeAsync(1_000);
     expect(h.frames).toHaveLength(2);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Tick deadline                                                               */
+/* -------------------------------------------------------------------------- */
+
+describe('SnapshotLoop — tick deadline', () => {
+  // `refresh_interval: 3` keeps the interval's firings (3 s, 6 s, 9 s, 12 s…)
+  // clear of the 10 s deadline, so no assertion depends on which of two timers
+  // due at the same instant the fake clock runs first.
+  const interval = { refresh_interval: 3 };
+
+  it('abandons a preload that never settles, counts it, and keeps polling', async () => {
+    vi.useFakeTimers();
+    const h = harness({ config: interval });
+    // The reverse proxy accepted the image request and will never answer:
+    // neither `onload` nor `onerror` is ever going to fire.
+    h.setImageBehaviour('hold');
+
+    h.loop.start();
+    await flush();
+    expect(h.images).toHaveLength(1);
+
+    // Inside the deadline the overlap guard drops every firing, as it should.
+    await vi.advanceTimersByTimeAsync(SNAPSHOT_TICK_TIMEOUT_FLOOR_MS - 1_000);
+    expect(h.resolveCalls()).toBe(1);
+    expect(h.loop.consecutiveFailures).toBe(0);
+
+    // At the deadline the tick is abandoned: the fetch is dropped and the
+    // failure lands in the same counter as every other dropped poll.
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(h.loop.consecutiveFailures).toBe(1);
+    expect(h.images[0].src).toBe('');
+    expect(h.frames).toEqual([]);
+
+    // …and the loop is polling again on the next firing.
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(h.resolveCalls()).toBe(2);
+  });
+
+  it('abandons a resolution that never settles', async () => {
+    vi.useFakeTimers();
+    const h = harness({ config: interval });
+    h.setResolver(() => new Promise<string>(() => {}));
+
+    h.loop.start();
+    await flush();
+    await vi.advanceTimersByTimeAsync(SNAPSHOT_TICK_TIMEOUT_FLOOR_MS);
+    expect(h.loop.consecutiveFailures).toBe(1);
+
+    h.setResolver(async () => '/api/camera_proxy/front?sig=recovered');
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(h.frames).toEqual(['/api/camera_proxy/front?sig=recovered']);
+    expect(h.loop.consecutiveFailures).toBe(0);
+  });
+
+  it('goes stale when nothing ever settles, instead of showing the last still forever', async () => {
+    vi.useFakeTimers();
+    const h = harness({ config: interval });
+    h.setImageBehaviour('hold');
+
+    h.loop.start();
+    // Each tick costs its full deadline, then the next firing starts another:
+    // abandoned at 10 s, 22 s, 34 s. The third is the one that goes stale.
+    await vi.advanceTimersByTimeAsync(34_000);
+
+    expect(h.stale).toEqual([SNAPSHOT_STALE_AFTER_FAILURES]);
+    expect(h.frames).toEqual([]);
+  });
+
+  it('gives a long refresh_interval a deadline of one interval', async () => {
+    vi.useFakeTimers();
+    const h = harness({ config: { refresh_interval: 30 } });
+    h.setImageBehaviour('hold');
+
+    h.loop.start();
+    await flush();
+
+    // A 30 s poll is not late at 29 s, whatever the floor says.
+    await vi.advanceTimersByTimeAsync(29_000);
+    expect(h.loop.consecutiveFailures).toBe(0);
+
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(h.loop.consecutiveFailures).toBe(1);
+  });
+
+  it('does not let an abandoned tick release the guard a live tick holds', async () => {
+    vi.useFakeTimers();
+    const h = harness({ config: interval });
+    const pending: ((url: string) => void)[] = [];
+    h.setResolver(() => new Promise<string>((resolve) => pending.push(resolve)));
+
+    h.loop.start();
+    await flush();
+    await vi.advanceTimersByTimeAsync(SNAPSHOT_TICK_TIMEOUT_FLOOR_MS);
+    expect(h.resolveCalls()).toBe(1);
+
+    // The next firing starts a second tick, which is now the guard's owner.
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(h.resolveCalls()).toBe(2);
+
+    // The abandoned first poll finally lands: no frame, and no meddling with
+    // the tick that took its place.
+    pending[0]('/api/camera_proxy/front?sig=stale');
+    await flush();
+    expect(h.frames).toEqual([]);
+
+    await vi.advanceTimersByTimeAsync(3_000);
+    expect(h.resolveCalls()).toBe(2);
+  });
+
+  it('cancels the deadline with the tick it belongs to', async () => {
+    vi.useFakeTimers();
+    const h = harness({ config: interval });
+    h.setImageBehaviour('hold');
+
+    h.loop.start();
+    await flush();
+    h.loop.destroy();
+
+    // A destroyed loop reports nothing, deadline or not.
+    await vi.advanceTimersByTimeAsync(SNAPSHOT_TICK_TIMEOUT_FLOOR_MS * 2);
+    expect(h.stale).toEqual([]);
+    expect(h.loop.consecutiveFailures).toBe(0);
   });
 });
 

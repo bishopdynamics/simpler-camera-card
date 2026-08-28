@@ -137,8 +137,43 @@ describe('buildGo2rtcWsPath', () => {
       buildGo2rtcWsPath(fakeHass(), config);
 
       const other = { ...unavailableEntity(), entity_id: 'camera.back_yard' };
-      expect(() => buildGo2rtcWsPath(fakeHass(other), { ...config, camera: 'camera.back_yard' }))
-        .toThrowError(expect.objectContaining({ code: 'missing-client-id' }));
+      expect(() =>
+        buildGo2rtcWsPath(fakeHass(other), { ...config, camera: 'camera.back_yard' }),
+      ).toThrowError(expect.objectContaining({ code: 'missing-client-id' }));
+    });
+
+    it('keeps a cached attribute a later partial state does not carry', () => {
+      // A full resolution primes the cache.
+      buildGo2rtcWsPath(fakeHass(), config);
+
+      // HA now delivers the entity with `client_id` but no `camera_name`. This
+      // call still resolves — from the cache — and must not erase the cached
+      // stream name on its way through.
+      expect(buildGo2rtcWsPath(fakeHass(cameraEntity({ camera_name: undefined })), config)).toBe(
+        '/api/frigate/frigate/go2rtc/ws/api/ws?src=front_yard',
+      );
+
+      // The proof: with the attributes stripped entirely there is nothing left
+      // but the cache, and it still has to hold the last known good stream.
+      expect(buildGo2rtcWsPath(fakeHass(unavailableEntity()), config)).toBe(
+        '/api/frigate/frigate/go2rtc/ws/api/ws?src=front_yard',
+      );
+    });
+
+    it('remembers a camera_name that arrived without a client_id', () => {
+      buildGo2rtcWsPath(fakeHass(), config);
+
+      // The mirror image: the cached `client_id` carries the call, and the
+      // live `camera_name` is the fresh half.
+      const renamed = fakeHass(cameraEntity({ client_id: undefined, camera_name: 'renamed' }));
+      expect(buildGo2rtcWsPath(renamed, config)).toBe(
+        '/api/frigate/frigate/go2rtc/ws/api/ws?src=renamed',
+      );
+
+      // Both halves of what resolved are now the last known good pair.
+      expect(buildGo2rtcWsPath(fakeHass(unavailableEntity()), config)).toBe(
+        '/api/frigate/frigate/go2rtc/ws/api/ws?src=renamed',
+      );
     });
 
     it('prefers live attributes over the cache once the entity recovers', () => {

@@ -23,6 +23,10 @@
  *   good frame on screen.
  * - **One tick at a time.** A timer firing while a tick is still in flight is
  *   dropped rather than queued — a slow network must not build a backlog.
+ * - **…but never for longer than one deadline.** A tick that has not finished
+ *   within {@link SnapshotLoop.tickTimeoutMs} is abandoned and counted as a
+ *   failure, so the overlap guard above can never become a deadlock: a request
+ *   a proxy accepts and never answers costs one poll, not the whole loop.
  * - **Abandoned work is silent.** `pause()` and `destroy()` invalidate the tick
  *   in flight; its callbacks become no-ops rather than delivering a frame the
  *   card no longer wants.
@@ -53,6 +57,18 @@ import {
 
 /** Prefix on every console line, so field logs are greppable. */
 const LOG_PREFIX = '[simpler-camera-card]';
+
+/**
+ * Floor under a tick's deadline, in milliseconds.
+ *
+ * The deadline is one `refresh_interval` — a poll that has not finished by the
+ * time the next one is due is late by definition — but a one-second refresh
+ * must not start abandoning healthy-but-slow polls, so ten seconds is the least
+ * a tick ever gets. That is comfortably longer than a signature round-trip plus
+ * a snapshot fetch over a bad link, and short enough that the stale indicator
+ * still means something.
+ */
+export const SNAPSHOT_TICK_TIMEOUT_FLOOR_MS = 10_000;
 
 /** The logging surface used; injectable so tests can assert on it quietly. */
 export interface SnapshotLogger {
@@ -116,8 +132,22 @@ export class SnapshotLoop {
   private paused = false;
   private destroyed = false;
 
-  /** Guards against overlapping ticks on a slow network. */
-  private ticking = false;
+  /**
+   * Guards against overlapping ticks on a slow network: the token of the tick
+   * holding the guard, or `null` while the loop is idle.
+   *
+   * A token rather than a boolean because a tick can be abandoned (by
+   * {@link invalidate}, or by its deadline) and settle long afterwards — or
+   * never. Releasing the guard is therefore conditional on still owning it, so
+   * a straggler cannot free the guard a *later* tick is holding.
+   */
+  private tickInFlight: number | null = null;
+
+  /** Hands each tick its own {@link tickInFlight} token. */
+  private tickCounter = 0;
+
+  /** Deadline for the tick in flight; `null` when there is none. */
+  private tickDeadline: TimerHandle | null = null;
 
   /** Stamps each tick; results from older generations are dropped. */
   private generation = 0;
@@ -219,19 +249,37 @@ export class SnapshotLoop {
   }
 
   /**
+   * How long the tick in flight may run before it is abandoned.
+   *
+   * One `refresh_interval` — a poll still going when the next one is due is
+   * late by definition — but never less than
+   * {@link SNAPSHOT_TICK_TIMEOUT_FLOOR_MS}.
+   */
+  private tickTimeoutMs(): number {
+    const intervalMs = Math.max(0, this.deps.getConfig().refresh_interval) * 1000;
+    return Math.max(intervalMs, SNAPSHOT_TICK_TIMEOUT_FLOOR_MS);
+  }
+
+  /**
    * One poll: re-sign, preload, publish.
    *
    * Failures of every kind — nullish `hass`, no snapshot URL, a rejected
-   * resolution, an image that will not decode — land in the same counter and
-   * cost exactly one interval. There is no failure that stops the loop.
+   * resolution, an image that will not decode, work that never finishes at all
+   * — land in the same counter and cost exactly one interval. There is no
+   * failure that stops the loop.
    */
   private async tick(): Promise<void> {
     if (this.destroyed || !this.started || this.paused) return;
     // A timer firing on top of a slow tick is dropped, not queued.
-    if (this.ticking) return;
+    if (this.tickInFlight !== null) return;
 
-    this.ticking = true;
+    const token = ++this.tickCounter;
+    this.tickInFlight = token;
     const generation = this.generation;
+    // Nothing below is guaranteed to settle: `resolvePosterUrl` waits on a
+    // websocket command, and `preload()` waits on events a hung proxy will
+    // never fire. The deadline is what makes the guard above safe.
+    this.tickDeadline = this.timers.setTimeout(() => this.expireTick(token), this.tickTimeoutMs());
     try {
       const hass = this.deps.getHass();
       if (!hass) {
@@ -262,8 +310,36 @@ export class SnapshotLoop {
       if (error instanceof EndpointError) this.deps.onEndpointError(error);
       this.recordFailure(describeError(error));
     } finally {
-      this.ticking = false;
+      this.releaseTick(token);
     }
+  }
+
+  /**
+   * The deadline struck: give up on this tick so the loop can carry on.
+   *
+   * The abandoned work goes through the same machinery as a pause — a new
+   * generation, the preload's `src` dropped — so a result landing later is
+   * discarded rather than published. What is different is that the failure is
+   * *counted*: an unanswered poll must reach the stale indicator like any other.
+   */
+  private expireTick(token: number): void {
+    if (this.tickInFlight !== token) return;
+    const seconds = this.tickTimeoutMs() / 1000;
+    this.invalidate();
+    this.recordFailure(`the snapshot poll did not finish within ${seconds}s`);
+  }
+
+  /** Free the overlap guard, if this tick is still the one holding it. */
+  private releaseTick(token: number): void {
+    if (this.tickInFlight !== token) return;
+    this.tickInFlight = null;
+    this.cancelDeadline();
+  }
+
+  private cancelDeadline(): void {
+    if (this.tickDeadline === null) return;
+    this.timers.clearTimeout(this.tickDeadline);
+    this.tickDeadline = null;
   }
 
   /**
@@ -301,9 +377,18 @@ export class SnapshotLoop {
     if (this.failures >= SNAPSHOT_STALE_AFTER_FAILURES) this.deps.onStale(this.failures);
   }
 
-  /** Retire the tick in flight: its result is no longer wanted. */
+  /**
+   * Retire the tick in flight: its result is no longer wanted.
+   *
+   * The guard and the deadline go with it. Freeing the guard here matters for
+   * `pause()`: when the abandoned tick is stuck somewhere it cannot be woken
+   * from — a websocket command that never answers — nothing else would ever
+   * release it, and `resume()` would find the loop wedged.
+   */
   private invalidate(): void {
     this.generation += 1;
+    this.tickInFlight = null;
+    this.cancelDeadline();
     const abandon = this.abandonPreload;
     this.abandonPreload = null;
     abandon?.();
