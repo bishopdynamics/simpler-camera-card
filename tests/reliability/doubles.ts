@@ -266,6 +266,8 @@ export function fakeConfig(overrides: Partial<NormalizedCardConfig> = {}): Norma
     double_tap_action: { action: 'none' },
     aspect_ratio: '16 / 9',
     reload_after_minutes_down: 0,
+    mode: 'live',
+    refresh_interval: 5,
     ...overrides,
   };
 }

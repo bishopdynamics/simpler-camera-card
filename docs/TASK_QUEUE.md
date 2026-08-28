@@ -21,4 +21,4 @@ How to process/manage the Task Queue:
 
 1. FEATURE_SPEC_snapshot_mode.md
    1. Optional `mode: snapshot` — still-image view refreshed every `refresh_interval` seconds (down to ~0.25 FPS) for low-resource kiosks.
-   2. Status: spec drafted 2026-08-27 after discussion with James (mechanism = snapshot polling via existing poster resolver; interval in seconds; tap-to-go-live deferred). **Awaiting James's approval of the spec before implementation.**
+   2. Status: [in-progress] — spec approved by James 2026-08-27; implementing (3 serial slices).

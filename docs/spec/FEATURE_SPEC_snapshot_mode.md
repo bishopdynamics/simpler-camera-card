@@ -1,6 +1,6 @@
 # SPEC: Snapshot Mode (low-framerate still-image view)
 
-- **Status:** draft
+- **Status:** in-progress (approved by James 2026-08-27)
 
 ## Summary
 

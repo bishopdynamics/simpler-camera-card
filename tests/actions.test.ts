@@ -24,6 +24,8 @@ function config(overrides: Partial<NormalizedCardConfig> = {}): NormalizedCardCo
     double_tap_action: { action: 'none' } as ActionConfig,
     aspect_ratio: '16 / 9',
     reload_after_minutes_down: 0,
+    mode: 'live',
+    refresh_interval: 5,
     ...overrides,
   };
 }

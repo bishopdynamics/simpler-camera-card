@@ -37,6 +37,7 @@ import {
   CONFIG_DEFAULTS,
   OVERLAY_MODES,
   POSTER_REFRESH_INTERVAL_MS,
+  VIEW_MODES,
   type ActionConfig,
   type ActionName,
   type EndpointResolver,
@@ -46,6 +47,7 @@ import {
   type OverlayMode,
   type SupervisorState,
   type SupervisorStateDetail,
+  type ViewMode,
 } from './types';
 
 const LOG_PREFIX = '[simpler-camera-card]';
@@ -176,6 +178,25 @@ export function normalizeConfig(raw: unknown): NormalizedCardConfig {
     throw new ConfigError('"overlay: custom" requires "overlay_text" to be set.');
   }
 
+  const mode = raw.mode ?? CONFIG_DEFAULTS.mode;
+  if (typeof mode !== 'string' || !VIEW_MODES.includes(mode as ViewMode)) {
+    throw new ConfigError(
+      `"mode" must be one of ${quoteList(VIEW_MODES)} (got ${JSON.stringify(raw.mode)}).`,
+    );
+  }
+
+  const refreshInterval = raw.refresh_interval ?? CONFIG_DEFAULTS.refreshInterval;
+  if (
+    typeof refreshInterval !== 'number' ||
+    !Number.isFinite(refreshInterval) ||
+    refreshInterval < 1
+  ) {
+    throw new ConfigError(
+      `"refresh_interval" must be a number of seconds >= 1 ` +
+        `(got ${JSON.stringify(raw.refresh_interval)}).`,
+    );
+  }
+
   const reloadAfter = raw.reload_after_minutes_down ?? CONFIG_DEFAULTS.reloadAfterMinutesDown;
   if (typeof reloadAfter !== 'number' || !Number.isFinite(reloadAfter) || reloadAfter < 0) {
     throw new ConfigError(
@@ -198,6 +219,8 @@ export function normalizeConfig(raw: unknown): NormalizedCardConfig {
     ),
     aspect_ratio: validateAspectRatio(raw.aspect_ratio),
     reload_after_minutes_down: reloadAfter,
+    mode: mode as ViewMode,
+    refresh_interval: refreshInterval,
   };
 }
 

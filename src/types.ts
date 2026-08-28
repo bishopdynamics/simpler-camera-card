@@ -159,6 +159,18 @@ export type OverlayMode = 'none' | 'name' | 'custom';
 export const OVERLAY_MODES: readonly OverlayMode[] = ['none', 'name', 'custom'];
 
 /**
+ * How the card shows the camera.
+ *
+ * - `live`     — the MSE stream through the supervisor/player stack (default).
+ * - `snapshot` — a still image re-fetched every `refresh_interval` seconds; no
+ *   websocket, no MediaSource, no video decode. For low-resource kiosks.
+ */
+export type ViewMode = 'live' | 'snapshot';
+
+/** Accepted `mode:` values; used by config validation. */
+export const VIEW_MODES: readonly ViewMode[] = ['live', 'snapshot'];
+
+/**
  * The card's YAML config exactly as the user writes it — every optional field
  * is genuinely optional here.
  *
@@ -173,6 +185,8 @@ export const OVERLAY_MODES: readonly OverlayMode[] = ['none', 'name', 'custom'];
  * double_tap_action: { action: none }
  * aspect_ratio: "16:9"
  * reload_after_minutes_down: 0
+ * mode: live
+ * refresh_interval: 5
  * ```
  *
  * Produced by: Lovelace. Validated and normalized by `card.ts`.
@@ -201,6 +215,15 @@ export interface SimplerCameraCardConfig {
    * `0` (default) disables it.
    */
   reload_after_minutes_down?: number;
+  /** Live stream or polled stills. Default `live`. */
+  mode?: ViewMode;
+  /**
+   * Seconds between snapshot refreshes; fractional values are allowed but the
+   * minimum is 1. Only meaningful under `mode: snapshot` — in live mode it is
+   * ignored (the down-poster keeps its own {@link POSTER_REFRESH_INTERVAL_MS}).
+   * Default `5`.
+   */
+  refresh_interval?: number;
   /**
    * Lovelace injects its own keys (`view_layout`, `grid_options`,
    * `visibility`, ...). They are ignored, not rejected.
@@ -226,6 +249,9 @@ export interface NormalizedCardConfig extends SimplerCameraCardConfig {
   /** Normalized to a CSS `aspect-ratio` value, e.g. `"16 / 9"`. */
   aspect_ratio: string;
   reload_after_minutes_down: number;
+  mode: ViewMode;
+  /** Seconds; snapshot mode only. Always present, even under `mode: live`. */
+  refresh_interval: number;
 }
 
 /** Defaults applied by `normalizeConfig()`. Exported so tests assert on them. */
@@ -236,6 +262,8 @@ export const CONFIG_DEFAULTS = {
   holdAction: { action: 'none' } as ActionConfig,
   doubleTapAction: { action: 'none' } as ActionConfig,
   reloadAfterMinutesDown: 0,
+  mode: 'live' as ViewMode,
+  refreshInterval: 5,
 } as const;
 
 /* -------------------------------------------------------------------------- */
@@ -448,6 +476,15 @@ export const HIDDEN_TEARDOWN_GRACE_MS = 5_000;
 
 /** Poster: refresh the snapshot this often while the stream is down. */
 export const POSTER_REFRESH_INTERVAL_MS = 10_000;
+
+/**
+ * Snapshot mode: consecutive failed refreshes before the card shows the stale
+ * indicator. Below the threshold a dropped poll is silent — the last good frame
+ * simply stays up — so one blip never flashes a warning on a kiosk.
+ *
+ * Consumed by: `snapshot.ts` / `card.ts` (a later slice) and their tests.
+ */
+export const SNAPSHOT_STALE_AFTER_FAILURES = 3;
 
 /* -------------------------------------------------------------------------- */
 /* Endpoint contract                                                           */

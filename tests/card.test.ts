@@ -197,6 +197,8 @@ describe('normalizeConfig — defaults', () => {
       double_tap_action: { action: 'none' },
       aspect_ratio: '16 / 9',
       reload_after_minutes_down: 0,
+      mode: 'live',
+      refresh_interval: 5,
     });
   });
 
@@ -220,6 +222,46 @@ describe('normalizeConfig — enums', () => {
     expect(
       normalizeConfig({ ...base, overlay: 'custom', overlay_text: 'Drive' }).overlay_text,
     ).toBe('Drive');
+  });
+
+  it('rejects an unknown view mode', () => {
+    expect(() => normalizeConfig({ ...base, mode: 'stills' })).toThrow(/"mode" must be one of/);
+    expect(() => normalizeConfig({ ...base, mode: 1 })).toThrow(/"mode" must be one of/);
+  });
+});
+
+describe('normalizeConfig — mode and refresh_interval', () => {
+  it('defaults to live at a 5 second interval', () => {
+    const config = normalizeConfig(base);
+    expect(config.mode).toBe('live');
+    expect(config.refresh_interval).toBe(5);
+  });
+
+  it('accepts snapshot mode with a fractional interval', () => {
+    const config = normalizeConfig({ ...base, mode: 'snapshot', refresh_interval: 2.5 });
+    expect(config.mode).toBe('snapshot');
+    expect(config.refresh_interval).toBe(2.5);
+  });
+
+  it('accepts the 1 second minimum, and an explicit live mode', () => {
+    expect(normalizeConfig({ ...base, refresh_interval: 1 }).refresh_interval).toBe(1);
+    expect(normalizeConfig({ ...base, mode: 'live' }).mode).toBe('live');
+  });
+
+  it('rejects intervals below the 1 second minimum', () => {
+    for (const interval of [0, 0.5, -4]) {
+      expect(() => normalizeConfig({ ...base, refresh_interval: interval })).toThrow(
+        /"refresh_interval" must be a number of seconds >= 1/,
+      );
+    }
+  });
+
+  it('rejects non-numeric and non-finite intervals', () => {
+    for (const interval of ['4', true, Number.NaN, Number.POSITIVE_INFINITY]) {
+      expect(() => normalizeConfig({ ...base, refresh_interval: interval })).toThrow(
+        /"refresh_interval"/,
+      );
+    }
   });
 });
 
