@@ -1,6 +1,6 @@
 # SPEC: Snapshot Mode (low-framerate still-image view)
 
-- **Status:** in-progress (approved by James 2026-08-27)
+- **Status:** done (accepted 2026-08-27 — field-verified by James: "snapshot mode works really well". Follow-up discussion same day: sub-second intervals considered and declined; the 1 s floor is a settled decision, the documented go2rtc `fps=` escape hatch covers 2–4 FPS wants.)
 
 ## Summary
 

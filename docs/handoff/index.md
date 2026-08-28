@@ -4,7 +4,7 @@ This is where a new session looks for handoff information from previous sessions
 
 ## Current
 
-- 2026-08-27 (later session) — **ROOT_SPEC accepted & closed; snapshot mode implemented, v0.4.0 awaiting field acceptance.**
+- 2026-08-27 (later session) — **ROOT_SPEC accepted & closed; snapshot mode shipped in v0.4.0 and ACCEPTED** ("snapshot mode works really well" — field-verified; spec done, queue empty). Follow-up: James asked about sub-second intervals (0.5/0.25 s); after discussion he chose to keep the 1 s floor as-is — settled decision, not deferred (rationale: sub-second JPEG polling inverts the mode's resource advantage; go2rtc `fps=` transcode via `stream:` is the answer at 2–4 FPS).
   - James confirmed tap actions + HA-restart recovery in his HA → ROOT_SPEC done and removed from the queue (`e500f72`). First sprint fully complete.
   - New feature, same session: **FEATURE_SPEC_snapshot_mode** — `mode: live|snapshot` + `refresh_interval` (seconds, ≥1, default 5). Discussed → spec'd → approved → implemented in 3 serial slices (`587119d`, `e42a31b`, `e15c04d`). Mechanism: polls the signed poster URL (`resolvePosterUrl`) into a preloaded `<img>`; new `src/snapshot.ts` (`SnapshotLoop` — generation-stamped ticks, overlap guard, pause on hidden, stale pill after 3 consecutive failures); no supervisor/WS/decoder constructed in snapshot mode; live path untouched. Editor fields live in the "Advanced" group. 280 unit tests green.
   - **Queue now:** FEATURE_SPEC_snapshot_mode [in-progress] — implementation done; awaiting James trying v0.4.0 in the field, then acceptance.

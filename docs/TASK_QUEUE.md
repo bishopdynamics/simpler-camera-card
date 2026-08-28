@@ -19,6 +19,4 @@ How to process/manage the Task Queue:
 
 ## Queue
 
-1. FEATURE_SPEC_snapshot_mode.md
-   1. Optional `mode: snapshot` — still-image view refreshed every `refresh_interval` seconds (down to ~0.25 FPS) for low-resource kiosks.
-   2. Status: [in-progress] — all 3 slices implemented 2026-08-27 (slice 1: 587119d, slice 2: e42a31b, slice 3: e15c04d). v0.4.0 built and committed; `make check` green (280 tests). Remaining: James installs v0.4.0, tries `mode: snapshot` (editor + YAML) in the field, then acceptance.
+(empty — FEATURE_SPEC_snapshot_mode accepted 2026-08-27, field-verified by James at v0.4.0)
