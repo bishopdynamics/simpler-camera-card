@@ -15,4 +15,4 @@ One line per item: `- <what> — from docs/spec/<file>.md (YYYY-MM-DD)`
 - Card-picker preview image/thumbnail polish — from docs/spec/FEATURE_SPEC_visual_editor.md (2026-08-26)
 - Direct-to-Frigate endpoint override for setups without frigate-hass-integration — from docs/spec/ROOT_SPEC.md (2026-08-15)
 - Re-introduce low latency via HA-native WebRTC signalling (`camera/webrtc/offer`) if ever needed; direct-:8555 WebRTC was removed after failing in the field — from docs/spec/FEATURE_SPEC_remove_webrtc.md (2026-08-27)
-- Safari/iOS polish (ManagedMediaSource, jump-to-live quirks) — from docs/spec/ROOT_SPEC.md (2026-08-15)
+- Safari/iOS polish beyond ManagedMediaSource basics (jump-to-live quirks, MMS streaming-event append gating, AirPlay) — from docs/spec/ROOT_SPEC.md (2026-08-15), narrowed by FEATURE_SPEC_ios_live (2026-08-28)
