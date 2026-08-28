@@ -33,7 +33,7 @@ reload.
 | Home Assistant | ≥ 2024.6 (needs only `auth/sign_path`, `hass-action`, the standard card API) |
 | [frigate-hass-integration](https://github.com/blakeblackshear/frigate-hass-integration) | ≥ 5.12.0 — provides the `go2rtc/ws` proxy view and the `client_id` / `camera_name` entity attributes |
 | [Frigate](https://frigate.video/) | ≥ 0.16, with the camera exposed through go2rtc (`live.streams`) |
-| Browser | Chromium-based is the primary target. Safari/iOS is not a v1 acceptance criterion. |
+| Browser | Chromium-based is the primary target. Live view also works on iOS 17.1+ / any WebKit with `ManagedMediaSource` (this includes the official HA iOS app and Safari/iPadOS/macOS) — older WebKit has no MSE variant at all, so live view there needs `mode: snapshot`, which works everywhere. |
 
 Cameras that are not reachable through go2rtc are out of scope — there is no HLS, jsmpeg or
 generic-camera fallback. Video is **muted**; audio is a follow-up.
