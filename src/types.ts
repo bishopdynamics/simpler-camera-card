@@ -99,9 +99,22 @@ export interface HomeAssistant {
  * HA-standard action names. The card does not implement these itself — it fires
  * the `hass-action` event and lets the frontend run the whole pipeline
  * (confirmations, more-info dialog, navigation, service calls).
+ *
+ * `call-service` (the pre-rename spelling of `perform-action`, still supported
+ * by HA) and `fire-dom-event` (used by browser_mod and friends) are accepted
+ * because every stock HA card accepts them and the card forwards actions to HA
+ * verbatim — rejecting them would break configs copied from other cards.
  */
 export type ActionName =
-  'more-info' | 'toggle' | 'navigate' | 'url' | 'perform-action' | 'assist' | 'none';
+  | 'more-info'
+  | 'toggle'
+  | 'navigate'
+  | 'url'
+  | 'perform-action'
+  | 'call-service'
+  | 'assist'
+  | 'fire-dom-event'
+  | 'none';
 
 /** Optional confirmation prompt, passed through to HA verbatim. */
 export interface ActionConfirmationConfig {
@@ -144,7 +157,9 @@ export const ACTION_NAMES: readonly ActionName[] = [
   'navigate',
   'url',
   'perform-action',
+  'call-service',
   'assist',
+  'fire-dom-event',
   'none',
 ];
 

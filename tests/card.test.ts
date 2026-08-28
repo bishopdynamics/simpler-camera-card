@@ -368,6 +368,19 @@ describe('normalizeConfig — actions', () => {
     expect(config.hold_action).toEqual({ action: 'more-info' });
   });
 
+  it('accepts the legacy action names other cards use', () => {
+    // `call-service` is the pre-rename `perform-action`; `fire-dom-event` is
+    // browser_mod and friends. HA still handles both, and configs get copied
+    // from stock cards wholesale.
+    const config = normalizeConfig({
+      ...base,
+      tap_action: { action: 'call-service', service: 'light.toggle' },
+      hold_action: { action: 'fire-dom-event', browser_mod: { service: 'popup' } },
+    });
+    expect(config.tap_action.action).toBe('call-service');
+    expect(config.hold_action.action).toBe('fire-dom-event');
+  });
+
   it('rejects an unknown action name', () => {
     expect(() => normalizeConfig({ ...base, tap_action: { action: 'explode' } })).toThrow(
       /"tap_action.action" must be one of/,

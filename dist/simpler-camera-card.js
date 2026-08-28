@@ -665,7 +665,9 @@ var Be = class {
 	"navigate",
 	"url",
 	"perform-action",
+	"call-service",
 	"assist",
+	"fire-dom-event",
 	"none"
 ], L = [
 	"none",
@@ -2063,7 +2065,7 @@ function $(e, t) {
 customElements.get("simpler-camera-card") || customElements.define(P, Q);
 //#endregion
 //#region src/index.ts
-var Kt = "0.6.3";
+var Kt = "0.6.4";
 window.customCards = window.customCards ?? [], window.customCards.some((e) => e.type === "simpler-camera-card") || window.customCards.push({
 	type: P,
 	name: "Simpler Camera Card",

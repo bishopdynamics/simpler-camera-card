@@ -43,4 +43,4 @@ tools/
 
 # --- Elefant offline-memory cache is transient and personal ---
 Elefant-Offline.md
-.claude/worktrees/
+.claude/

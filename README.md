@@ -121,7 +121,8 @@ reload_after_minutes_down: 30     # last-resort page reload
 | `live_duration` | number (seconds) | `60` | How long the temporary live window from `tap_to_live` stays up before reverting to snapshots. Only meaningful with `tap_to_live: true`. In YAML, minimum `5`, fractional values allowed; the visual editor offers a 5–60 second slider in steps of 5. |
 
 Action objects are Home Assistant's standard ones. `action:` must be one of `more-info`, `toggle`,
-`navigate`, `url`, `perform-action`, `assist`, `none`; the remaining fields (`navigation_path`,
+`navigate`, `url`, `perform-action`, `assist`, `none` — or the legacy `call-service` and
+`fire-dom-event`, accepted for configs copied from other cards; the remaining fields (`navigation_path`,
 `url_path`, `perform_action`, `target`, `data`, `confirmation`, …) are handed to HA verbatim, so
 anything HA supports works here. `more-info` and `toggle` default to the card's own camera entity.
 
