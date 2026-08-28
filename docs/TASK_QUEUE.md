@@ -20,7 +20,7 @@ How to process/manage the Task Queue:
 ## Queue
 
 1. FEATURE_SPEC_ios_live.md
-   1. Side quest (James, 2026-08-28): live playback dead in the official iOS HA app — add ManagedMediaSource support + capability preflight. [in-progress] — approved; implementing (2 serial slices).
+   1. Side quest (James, 2026-08-28): live playback dead in the official iOS HA app — add ManagedMediaSource support + capability preflight. [in-progress] — both slices implemented (1999c70, 76fb355), v0.7.1 built and committed, 360 tests + integration green. Remaining: James installs v0.7.1 and verifies live playback on his iPhone in the HA app, then acceptance.
 2. RELEASE_PLAN_1.0.md [in-progress]
    1. Review-and-cleanup rounds toward the v1.0.0 public release (feature-complete declared at v0.6.1). Version bumps to 1.0.0 only on James's final word.
    2. Status: plan approved 2026-08-28; round 1 (deep code review + security pass) in progress.
